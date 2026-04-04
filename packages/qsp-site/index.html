@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QSP Игры</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+
+  <!-- ═══ Каталог ═══════════════════════════════════════════════ -->
+  <div id="catalog">
+    <header id="site-header">
+      <div id="site-logo">QSP</div>
+      <div id="site-tagline">Интерактивные книги прямо в браузере</div>
+    </header>
+
+    <section id="about">
+      <p>
+        <strong>QSP</strong> (Quest Soft Player) — движок для текстовых приключений и интерактивной прозы.
+        Здесь собраны игры, которые можно запустить одним кликом, без установки и регистрации.
+      </p>
+    </section>
+
+    <section id="games-section">
+      <h2>Игры</h2>
+      <div id="games-grid">
+        <div class="loading">Загрузка каталога…</div>
+      </div>
+    </section>
+
+    <footer id="site-footer">
+      <span>Движок: <a href="https://qsp.org" target="_blank" rel="noopener">QSP</a></span>
+      <span>·</span>
+      <span>Исходный код: <a href="https://github.com/esix/qsp" target="_blank" rel="noopener">GitHub</a></span>
+    </footer>
+  </div>
+
+  <!-- ═══ Плеер ═══════════════════════════════════════════════ -->
+  <div id="player-wrap" class="hidden">
+    <header id="player-header">
+      <button id="back-btn">← Каталог</button>
+      <span id="player-title"></span>
+      <button id="player-restart-btn" title="Начать заново">&#8635;</button>
+    </header>
+
+    <div id="game">
+      <main id="main-panel">
+        <div id="main-text"></div>
+      </main>
+
+      <aside id="side-panel">
+        <section id="actions-panel">
+          <h2>Действия</h2>
+          <ul id="actions-list"></ul>
+        </section>
+        <section id="objects-panel">
+          <h2>Инвентарь</h2>
+          <ul id="objects-list"></ul>
+        </section>
+      </aside>
+
+      <footer id="stat-panel">
+        <div id="stat-text"></div>
+      </footer>
+
+      <div id="input-panel">
+        <input type="text" id="input-line" placeholder="Введите текст…">
+        <button id="input-submit">OK</button>
+      </div>
+    </div>
+
+    <div id="msg-overlay" class="hidden">
+      <div id="msg-box">
+        <div id="msg-text"></div>
+        <button id="msg-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

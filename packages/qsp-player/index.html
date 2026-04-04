@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QSP Player</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <h1>QSP Player</h1>
+      <label id="file-label">
+        <span>Load .qsp file</span>
+        <input type="file" id="file-input" accept=".qsp">
+      </label>
+      <button id="restart-btn" class="hidden" title="Restart game">&#8635;</button>
+    </header>
+
+    <div id="drop-zone">
+      <div id="drop-zone-content">
+        <div id="drop-icon">&#128218;</div>
+        <p>Drop a <strong>.qsp</strong> file here</p>
+        <p class="dim">or use the button above</p>
+      </div>
+    </div>
+
+    <div id="drop-overlay" class="hidden">
+      <div id="drop-overlay-content">Drop .qsp to load</div>
+    </div>
+
+    <div id="game" class="hidden">
+      <main id="main-panel">
+        <div id="main-text"></div>
+      </main>
+
+      <aside id="side-panel">
+        <section id="actions-panel">
+          <h2>Actions</h2>
+          <ul id="actions-list"></ul>
+        </section>
+
+        <section id="objects-panel">
+          <h2>Inventory</h2>
+          <ul id="objects-list"></ul>
+        </section>
+      </aside>
+
+      <footer id="stat-panel">
+        <div id="stat-text"></div>
+      </footer>
+
+      <div id="input-panel">
+        <input type="text" id="input-line" placeholder="Enter text...">
+        <button id="input-submit">OK</button>
+      </div>
+    </div>
+
+    <div id="msg-overlay" class="hidden">
+      <div id="msg-box">
+        <div id="msg-text"></div>
+        <button id="msg-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
