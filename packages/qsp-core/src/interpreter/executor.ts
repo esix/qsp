@@ -128,11 +128,18 @@ export class Executor {
       }
 
       case 'ActStmt': {
-        const name = await this.sub((await this.evaluator.eval(stmt.name)).str);
-        const image = stmt.image ? await this.sub((await this.evaluator.eval(stmt.image)).str) : '';
+        // Store the raw string (preserving <<expr>> markers) so notifyUI can
+        // re-substitute on every render. For string literals use .value directly;
+        // for complex expressions evaluate now (they won't contain <<>> markers).
+        const name = stmt.name.kind === 'StringLiteral'
+          ? stmt.name.value
+          : (await this.evaluator.eval(stmt.name)).str;
+        const image = !stmt.image ? '' : stmt.image.kind === 'StringLiteral'
+          ? stmt.image.value
+          : (await this.evaluator.eval(stmt.image)).str;
         const codeStr = this.stmtsToCode(stmt.body);
         this.state.actions.push({ name, image, code: codeStr });
-        this.callbacks.onActionsChanged?.(this.state.actions);
+        this.state.displayVersion++;
         return;
       }
 
@@ -160,6 +167,7 @@ export class Executor {
       case 'KillAllStmt':
         this.state.variables.clear();
         this.state.objects = [];
+        this.state.displayVersion++;
         this.callbacks.onObjectsChanged?.(this.state.objects);
         return;
 
@@ -185,6 +193,7 @@ export class Executor {
         const name = await this.sub((await this.evaluator.eval(stmt.name)).str);
         const image = stmt.image ? await this.sub((await this.evaluator.eval(stmt.image)).str) : '';
         this.state.objects.push({ name, image });
+        this.state.displayVersion++;
         this.callbacks.onObjectsChanged?.(this.state.objects);
         return;
       }
@@ -196,6 +205,7 @@ export class Executor {
         );
         if (idx >= 0) {
           this.state.objects.splice(idx, 1);
+          this.state.displayVersion++;
           this.callbacks.onObjectsChanged?.(this.state.objects);
         }
         return;
@@ -210,6 +220,7 @@ export class Executor {
         } else {
           this.state.objects = [];
         }
+        this.state.displayVersion++;
         this.callbacks.onObjectsChanged?.(this.state.objects);
         return;
       }
@@ -217,9 +228,11 @@ export class Executor {
       case 'ClearStmt': {
         if (stmt.target === 'main') {
           this.state.mainText = '';
+          this.state.displayVersion++;
           this.callbacks.onMainTextChanged?.('');
         } else {
           this.state.statText = '';
+          this.state.displayVersion++;
           this.callbacks.onStatTextChanged?.('');
         }
         return;
@@ -227,13 +240,28 @@ export class Executor {
 
       case 'ClaStmt':
         this.state.actions = [];
+        this.state.displayVersion++;
         this.callbacks.onActionsChanged?.([]);
         return;
+
+      case 'DelActStmt': {
+        const name = await this.sub((await this.evaluator.eval(stmt.name)).str);
+        const idx = this.state.actions.findIndex(
+          a => a.name.toUpperCase() === name.toUpperCase()
+        );
+        if (idx >= 0) {
+          this.state.actions.splice(idx, 1);
+          this.state.displayVersion++;
+          this.callbacks.onActionsChanged?.(this.state.actions);
+        }
+        return;
+      }
 
       case 'ClsStmt':
         this.state.mainText = '';
         this.state.statText = '';
         this.state.actions = [];
+        this.state.displayVersion++;
         this.callbacks.onMainTextChanged?.('');
         this.callbacks.onStatTextChanged?.('');
         this.callbacks.onActionsChanged?.([]);
@@ -277,23 +305,50 @@ export class Executor {
 
       case 'PlayStmt': {
         const file = (await this.evaluator.eval(stmt.file)).str;
+        if (!file) return; // ignore PLAY with empty filename
         const volume = stmt.volume ? (await this.evaluator.eval(stmt.volume)).num : 100;
+        this.state.playingFiles.add(file.toUpperCase());
         this.callbacks.onPlayFile?.(file, volume);
         return;
       }
 
       case 'CloseStmt': {
         if (stmt.all) {
+          this.state.playingFiles.clear();
           this.callbacks.onCloseFile?.(null);
         } else if (stmt.file) {
-          this.callbacks.onCloseFile?.((await this.evaluator.eval(stmt.file)).str);
+          const file = (await this.evaluator.eval(stmt.file)).str;
+          this.state.playingFiles.delete(file.toUpperCase());
+          this.callbacks.onCloseFile?.(file);
         }
         return;
       }
 
+      case 'SetVolStmt': {
+        const volume = (await this.evaluator.eval(stmt.volume)).num;
+        this.callbacks.onSetVolume?.(Math.max(0, Math.min(100, volume)));
+        return;
+      }
+
       case 'MenuStmt': {
-        const name = (await this.evaluator.eval(stmt.name)).str;
-        this.callbacks.onMenu?.([name]);
+        // MENU reads from a string array: 'arrname' -> look up '$arrname'
+        const rawName = (await this.evaluator.eval(stmt.name)).str;
+        const arrayName = rawName.startsWith('$') ? rawName : '$' + rawName;
+        const size = this.state.variables.arraySize(arrayName);
+        if (size === 0) return;
+        const items: { text: string; location: string }[] = [];
+        for (let i = 0; i < size; i++) {
+          const raw = this.state.variables.get(arrayName, i).str;
+          const colonIdx = raw.indexOf(':');
+          items.push(colonIdx >= 0
+            ? { text: raw.slice(0, colonIdx), location: raw.slice(colonIdx + 1) }
+            : { text: raw, location: '' });
+        }
+        if (!this.callbacks.onMenu) return;
+        const selected = await this.callbacks.onMenu(items.map(it => it.text));
+        if (selected >= 0 && items[selected]?.location) {
+          await this.execLocationByName(items[selected].location, []);
+        }
         return;
       }
 
@@ -323,9 +378,44 @@ export class Executor {
       case 'OpenQstStmt':
       case 'IncLibStmt':
       case 'FreeLibStmt':
-      case 'OpenGameStmt':
-      case 'SaveGameStmt':
         return;
+
+      case 'SaveGameStmt': {
+        const filename = stmt.file ? (await this.evaluator.eval(stmt.file)).str : 'autosave.sav';
+        this.callbacks.onSaveGame?.(filename, this.buildSaveData());
+        return;
+      }
+
+      case 'OpenGameStmt': {
+        const filename = stmt.file ? (await this.evaluator.eval(stmt.file)).str : 'save.sav';
+        const saveData = this.callbacks.onLoadGame?.(filename) ?? null;
+        if (!saveData) return;
+        try {
+          const d = JSON.parse(saveData);
+          if (d.v !== 1) return;
+          // Restore variables (game progress)
+          if (d.variables) this.state.variables.deserialize(d.variables);
+          // Restore system settings
+          this.state.useHtml = d.useHtml ?? false;
+          this.state.timerInterval = d.timerInterval ?? 500;
+          this.state.showActs = d.showActs ?? true;
+          this.state.showObjs = d.showObjs ?? true;
+          this.state.showStat = d.showStat ?? true;
+          this.state.showInput = d.showInput ?? true;
+          this.state.bcolor = d.bcolor ?? -1;
+          this.state.fcolor = d.fcolor ?? -1;
+          this.state.lcolor = d.lcolor ?? -1;
+          // Fire $ONGLOAD hook before navigating
+          const onLoad = this.state.variables.get('$ONGLOAD', 0).str;
+          if (onLoad) await this.execLocationByName(onLoad, []);
+          // Re-run the saved location (text/actions regenerate from restored variables)
+          if (d.curLocName) throw new GotoSignal(d.curLocName, [], false);
+        } catch (e) {
+          if (e instanceof GotoSignal) throw e;
+          console.error('Failed to load save:', e);
+        }
+        return;
+      }
 
       default:
         return;
@@ -333,6 +423,28 @@ export class Executor {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────
+
+  buildSaveData(): string {
+    const curLoc = this.locations[this.state.curLoc];
+    return JSON.stringify({
+      v: 1,
+      curLocName: curLoc?.name ?? '',
+      mainText: this.state.mainText,
+      statText: this.state.statText,
+      objects: this.state.objects,
+      actions: this.state.actions,
+      variables: this.state.variables.serialize(),
+      useHtml: this.state.useHtml,
+      timerInterval: this.state.timerInterval,
+      showActs: this.state.showActs,
+      showObjs: this.state.showObjs,
+      showStat: this.state.showStat,
+      showInput: this.state.showInput,
+      bcolor: this.state.bcolor,
+      fcolor: this.state.fcolor,
+      lcolor: this.state.lcolor,
+    });
+  }
 
   private async setVariable(name: string, indexExpr: Expr | undefined, value: QspValue): Promise<void> {
     const uname = name.toUpperCase();
@@ -351,6 +463,12 @@ export class Executor {
         this.state.lcolor = value.num;
         this.callbacks.onColorsChanged?.(this.state.bcolor, this.state.fcolor, this.state.lcolor);
         return;
+      case '$BACKIMAGE': {
+        const path = value.str || (value.num === 0 ? '' : String(value.num));
+        this.callbacks.onBackImage?.(path);
+        this.state.variables.set(uname, 0, value);
+        return;
+      }
       case '$COUNTER': this.state.variables.set(uname, 0, value); return;
       case '$ONNEWLOC': this.state.variables.set(uname, 0, value); return;
       case '$ONACTSEL': this.state.variables.set(uname, 0, value); return;
@@ -391,6 +509,7 @@ export class Executor {
       case 'pl': this.state.mainText += substituted + '\n'; break;
       case 'nl': this.state.mainText += '\n' + substituted; break;
     }
+    this.state.displayVersion++;
     this.callbacks.onMainTextChanged?.(this.state.mainText);
   }
 
@@ -401,6 +520,7 @@ export class Executor {
       case 'pl': this.state.statText += substituted + '\n'; break;
       case 'nl': this.state.statText += '\n' + substituted; break;
     }
+    this.state.displayVersion++;
     this.callbacks.onStatTextChanged?.(this.state.statText);
   }
 

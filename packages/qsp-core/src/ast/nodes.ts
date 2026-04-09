@@ -92,6 +92,7 @@ export type Stmt =
   | ClearStmt
   | ClaStmt
   | ClsStmt
+  | DelActStmt
   | MsgStmt
   | ViewStmt
   | WaitStmt
@@ -99,6 +100,7 @@ export type Stmt =
   | ShowWindowStmt
   | PlayStmt
   | CloseStmt
+  | SetVolStmt
   | MenuStmt
   | RefIntStmt
   | UnselectStmt
@@ -239,6 +241,12 @@ export interface ClsStmt {
   loc: Loc;
 }
 
+export interface DelActStmt {
+  kind: 'DelActStmt';
+  name: Expr;
+  loc: Loc;
+}
+
 export interface MsgStmt {
   kind: 'MsgStmt';
   expr: Expr;
@@ -281,6 +289,12 @@ export interface CloseStmt {
   kind: 'CloseStmt';
   file?: Expr;
   all: boolean;
+  loc: Loc;
+}
+
+export interface SetVolStmt {
+  kind: 'SetVolStmt';
+  volume: Expr;
   loc: Loc;
 }
 

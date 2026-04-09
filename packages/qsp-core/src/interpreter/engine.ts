@@ -22,6 +22,9 @@ export class QspEngine {
   private callbacks: QspCallbacks = {};
   private timerHandle: ReturnType<typeof setTimeout> | null = null;
   private timerRunning = false;
+  /** True while any player-triggered execution is in progress (prevents concurrent clicks) */
+  private _busy = false;
+  get isBusy(): boolean { return this._busy; }
 
   /** Set UI callbacks */
   on(callbacks: QspCallbacks): void {
@@ -70,6 +73,15 @@ export class QspEngine {
     );
     if (locIndex < 0) return;
 
+    // Autosave: snapshot the state of the current (previous) location before entering the new one.
+    // Only save if the previous location was a real player-choice location:
+    //   - not an internal service location (QSP convention: names starting with '_')
+    //   - had at least one action (scripted cutscenes with no choices are not save points)
+    const prevLocName = this.state.curLoc >= 0 ? this.locations[this.state.curLoc]?.name : null;
+    if (prevLocName && !prevLocName.startsWith('_') && this.state.actions.length > 0) {
+      this.callbacks.onSaveGame?.('autosave.sav', this.executor.buildSaveData());
+    }
+
     this.state.curLoc = locIndex;
     const loc = this.locations[locIndex];
 
@@ -85,6 +97,9 @@ export class QspEngine {
     for (const act of loc.actions) {
       this.state.actions.push({ name: act.name, image: act.image, code: act.code });
     }
+    // Clear UI actions immediately so stale buttons from the previous location
+    // don't remain visible during long-running code (e.g. WAIT-heavy dialogs).
+    this.callbacks.onActionsChanged?.(this.state.actions);
     this.state.args = args;
 
     if (loc.code) {
@@ -120,55 +135,68 @@ export class QspEngine {
       }
       await this.notifyUI();
     }
+
   }
 
   /** Execute an action by index */
   /** Execute a dynamic code string (used for exec: links) */
   async execDynamic(code: string, args: QspValue[] = []): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
     try {
-      await this.executor.execDynamic(code, args);
-    } catch (e) {
-      if (e instanceof GotoSignal) {
-        await this.gotoLocation(e.locName, e.args, e.extended);
-      } else if (e instanceof ExitSignal) {
-        // EXIT — stop
-      } else {
-        throw e;
+      try {
+        await this.executor.execDynamic(code, args);
+      } catch (e) {
+        if (e instanceof GotoSignal) {
+          await this.gotoLocation(e.locName, e.args, e.extended);
+        } else if (e instanceof ExitSignal) {
+          // EXIT — stop
+        } else {
+          throw e;
+        }
       }
+      await this.notifyUI();
+    } finally {
+      this._busy = false;
     }
-    await this.notifyUI();
   }
 
   async execAction(index: number): Promise<void> {
+    if (this._busy) return;
     const action = this.state.actions[index];
     if (!action) return;
 
-    // Set $SELACT / SELACT before running the action code
-    this.state.variables.set('$SELACT', 0, { num: 0, str: action.name, isString: true });
-    this.state.variables.set('SELACT', 0, { num: index + 1, str: '' });
-
+    this._busy = true;
     try {
-      await this.executor.execActionCode(action.code);
-    } catch (e) {
-      if (e instanceof GotoSignal) {
-        await this.gotoLocation(e.locName, e.args, e.extended);
-      } else if (e instanceof ExitSignal) {
-        // EXIT — stop
-      } else {
-        throw e;
-      }
-    }
+      // Set SELACT: str = action name, num = 1-based index (unified slot)
+      this.state.variables.set('SELACT', 0, { num: index + 1, str: action.name, isString: true });
 
-    await this.notifyUI();
+      try {
+        await this.executor.execActionCode(action.code);
+      } catch (e) {
+        if (e instanceof GotoSignal) {
+          await this.gotoLocation(e.locName, e.args, e.extended);
+        } else if (e instanceof ExitSignal) {
+          // EXIT — stop
+        } else {
+          throw e;
+        }
+      }
+
+      await this.notifyUI();
+    } finally {
+      this._busy = false;
+    }
   }
 
   /** Select an object by index (triggers $ONOBJSEL) */
   async selectObject(index: number): Promise<void> {
+    if (this._busy) return;
     if (index < 0 || index >= this.state.objects.length) return;
 
     const obj = this.state.objects[index];
-    this.state.variables.set('$SELOBJ', 0, { num: 0, str: obj.name });
-    this.state.variables.set('SELOBJ', 0, { num: index + 1, str: '' });
+    // Set SELOBJ: str = object name, num = 1-based index (unified slot)
+    this.state.variables.set('SELOBJ', 0, { num: index + 1, str: obj.name, isString: true });
 
     const handler = this.state.variables.get('$ONOBJSEL', 0).str;
     if (handler) {
@@ -212,14 +240,19 @@ export class QspEngine {
     if (!this.timerRunning) return;
     const counterLoc = this.state.variables.get('$COUNTER', 0).str;
     if (counterLoc) {
+      const versionBefore = this.state.displayVersion;
       try {
         await this.executor.execLocationByName(counterLoc, []);
       } catch (e) {
         if (e instanceof GotoSignal) {
           await this.gotoLocation(e.locName, e.args, e.extended);
+        } else if (!(e instanceof ExitSignal)) {
+          // swallow non-fatal timer errors
         }
       }
-      await this.notifyUI();
+      if (this.state.displayVersion !== versionBefore) {
+        await this.notifyUI();
+      }
     }
     this.scheduleTimer();
   }

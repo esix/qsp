@@ -40,7 +40,7 @@ export class Evaluator {
         return numVal(expr.value);
 
       case 'StringLiteral':
-        return strVal(expr.value);
+        return strVal(await substituteExpressions(expr.value, this));
 
       case 'UnaryExpr': {
         const operand = await this.eval(expr.operand);
@@ -339,7 +339,8 @@ export class Evaluator {
 
       // ─── Audio ─────────────────────
       case 'ISPLAY': {
-        return toBool(false); // Default: nothing playing
+        const filename = (await arg(0)).str;
+        return toBool(this.state.playingFiles.has(filename.toUpperCase()));
       }
 
       // ─── Execution ─────────────────

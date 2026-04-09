@@ -46,10 +46,12 @@ export class QspVariableStore {
   /** name -> string-key to numeric-index mapping */
   private indices = new Map<string, Map<string, number>>();
 
-  /** Get the canonical (uppercase) name, preserving $ prefix */
+  /** Get the canonical (uppercase) name.
+   *  In QSP, $VAR and VAR share the same storage slot — $ is only a type sigil,
+   *  not part of the variable name. Strip it before canonicalising. */
   private canonical(name: string): string {
-    if (name.startsWith('$')) return '$' + name.slice(1).toUpperCase();
-    return name.toUpperCase();
+    const base = name.startsWith('$') ? name.slice(1) : name;
+    return base.toUpperCase();
   }
 
   get(name: string, index = 0): QspValue {
@@ -146,6 +148,29 @@ export class QspVariableStore {
     this.indices.clear();
   }
 
+  serialize(): { vars: Record<string, Array<[number, QspValue]>>; indices: Record<string, Array<[string, number]>> } {
+    const vars: Record<string, Array<[number, QspValue]>> = {};
+    for (const [name, map] of this.vars) {
+      vars[name] = Array.from(map.entries());
+    }
+    const indices: Record<string, Array<[string, number]>> = {};
+    for (const [name, map] of this.indices) {
+      indices[name] = Array.from(map.entries());
+    }
+    return { vars, indices };
+  }
+
+  deserialize(data: { vars: Record<string, Array<[number, QspValue]>>; indices: Record<string, Array<[string, number]>> }): void {
+    this.vars.clear();
+    this.indices.clear();
+    for (const [name, entries] of Object.entries(data.vars)) {
+      this.vars.set(name, new Map(entries));
+    }
+    for (const [name, entries] of Object.entries(data.indices)) {
+      this.indices.set(name, new Map(entries));
+    }
+  }
+
   /** Copy one array to another */
   copyArray(dst: string, src: string): void {
     const cs = this.canonical(src);
@@ -165,7 +190,7 @@ export class QspVariableStore {
   /** Search array for a value, return index or -1 */
   arrayPos(name: string, value: QspValue, start: number): number {
     const cn = this.canonical(name);
-    const isStr = cn.startsWith('$');
+    const isStr = name.startsWith('$'); // use original name — $ stripped from canonical
     const arr = this.vars.get(cn);
     if (!arr) return -1;
     const size = this.arraySize(name);
@@ -192,12 +217,14 @@ export interface QspCallbacks {
   onInput?(prompt: string): Promise<string> | string;
   onView?(path: string): void;
   onMenu?(items: string[]): Promise<number> | number;
-  onSaveGame?(): Promise<string | null> | string | null;
-  onLoadGame?(): Promise<string | null> | string | null;
+  onSaveGame?(filename: string, data: string): void;
+  onLoadGame?(filename: string): string | null;
   onWait?(ms: number): Promise<void> | void;
   onPlayFile?(file: string, volume: number): void;
   onCloseFile?(file: string | null): void;
+  onSetVolume?(volume: number): void;
   onColorsChanged?(bcolor: number, fcolor: number, lcolor: number): void;
+  onBackImage?(path: string): void;
 }
 
 /** The complete mutable game state */
@@ -234,6 +261,12 @@ export class GameState {
   fcolor = -1;
   lcolor = -1;
 
+  // Incremented whenever display-relevant state (mainText/statText/actions/objects) changes
+  displayVersion = 0;
+
+  // Currently "playing" audio files (tracked for ISPLAY)
+  playingFiles = new Set<string>();
+
   // Call stack for GOSUB
   callStack: { locIndex: number; returnAfter: boolean }[] = [];
 
@@ -261,6 +294,8 @@ export class GameState {
     this.bcolor = -1;
     this.fcolor = -1;
     this.lcolor = -1;
+    this.displayVersion = 0;
+    this.playingFiles.clear();
     this.callStack = [];
     this.args = [];
     this.result = { num: 0, str: '' };

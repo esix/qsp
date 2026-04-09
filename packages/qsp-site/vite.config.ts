@@ -4,6 +4,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
+const PROD = 'https://if-quests.ru';
+const gameRoutes = ['/games.json', '/pirates', '/steelrat', '/jupiter2'];
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -13,5 +16,10 @@ export default defineConfig({
   build: {
     outDir: '../../dist/site',
     emptyOutDir: true,
+  },
+  server: {
+    proxy: Object.fromEntries(
+      gameRoutes.map(r => [r, { target: PROD, changeOrigin: true }])
+    ),
   },
 });

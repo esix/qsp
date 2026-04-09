@@ -394,8 +394,12 @@ export class Lexer {
           this.addToken(TokenType.Keyword, upper + ' OBJ');
           return;
         }
+        if (upper === 'DEL' && nextWord === 'ACT') {
+          this.addToken(TokenType.Keyword, 'DEL ACT');
+          return;
+        }
       }
-      // Not "ADD OBJ" / "DEL OBJ", restore position
+      // Not "ADD OBJ" / "DEL OBJ" / "DEL ACT", restore position
       this.pos = saved;
     }
 

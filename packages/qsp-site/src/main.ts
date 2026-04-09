@@ -1,5 +1,6 @@
 import { QspEngine } from 'qsp-core/interpreter/engine.js';
 import type { QspRuntimeAction, QspObject } from 'qsp-core/interpreter/state.js';
+import { MidiAudioPlayer, SimpleAudioPlayer } from './audio.js';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ const playerWrap     = $('player-wrap');
 const playerTitle    = $('player-title');
 const backBtn        = $('back-btn');
 const restartBtn     = $('player-restart-btn');
+const volumeSlider   = $('volume-slider') as HTMLInputElement;
 const gameEl         = $('game');
 const mainText       = $('main-text');
 const statText       = $('stat-text');
@@ -36,11 +38,26 @@ const objectsPanel   = $('objects-panel');
 const msgOverlay     = $('msg-overlay');
 const msgText        = $('msg-text');
 const msgOk          = $('msg-ok');
+const viewPanel      = $('view-panel');
+const viewImg        = $('view-img') as HTMLImageElement;
+const menuOverlay    = $('menu-overlay');
+const menuList       = $('menu-list');
+const menuCancel     = $('menu-cancel');
 
 // ─── Engine ──────────────────────────────────────────────────────
 
 const engine = new QspEngine();
 let currentGameData: Uint8Array | null = null;
+let currentGameId = '';
+let currentGameBase = '';
+let menuCancelResolve: (() => void) | null = null;
+
+const midiPlayer = new MidiAudioPlayer();
+const simpleAudio = new SimpleAudioPlayer();
+
+function isMidi(file: string): boolean {
+  return /\.(mid|midi)$/i.test(file);
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -55,6 +72,15 @@ function applyColors(bcolor: number, fcolor: number, lcolor: number) {
   gameEl.style.setProperty('--game-bg',   bcolor >= 0 ? qspColorToCss(bcolor) : '');
   gameEl.style.setProperty('--game-fg',   fcolor >= 0 ? qspColorToCss(fcolor) : '');
   gameEl.style.setProperty('--game-link', lcolor >= 0 ? qspColorToCss(lcolor) : '');
+}
+
+function applyBackImage(path: string) {
+  const mainPanel = document.getElementById('main-panel')!;
+  if (path) {
+    mainPanel.style.setProperty('--game-backimage', `url('/${currentGameBase}${path}')`);
+  } else {
+    mainPanel.style.removeProperty('--game-backimage');
+  }
 }
 
 function protectExecHrefs(html: string): string {
@@ -114,6 +140,63 @@ engine.on({
   onColorsChanged(bcolor, fcolor, lcolor) {
     applyColors(bcolor, fcolor, lcolor);
   },
+  onBackImage(path: string) {
+    applyBackImage(path);
+  },
+  onView(path: string) {
+    if (!path) {
+      viewPanel.classList.add('hidden');
+      viewImg.src = '';
+    } else {
+      viewImg.src = '/' + currentGameBase + path;
+      viewPanel.classList.remove('hidden');
+    }
+  },
+  onMenu(items: string[]): Promise<number> {
+    return new Promise(resolve => {
+      menuList.innerHTML = '';
+      for (let i = 0; i < items.length; i++) {
+        const li = document.createElement('li');
+        li.textContent = items[i];
+        li.addEventListener('click', () => {
+          menuOverlay.classList.add('hidden');
+          resolve(i);
+        });
+        menuList.appendChild(li);
+      }
+      menuOverlay.classList.remove('hidden');
+      // cancel resolves with -1 (no selection)
+      menuCancelResolve = () => { menuOverlay.classList.add('hidden'); resolve(-1); };
+    });
+  },
+  onPlayFile(file: string, volume: number) {
+    const url = '/' + currentGameBase + file;
+    if (isMidi(file)) {
+      midiPlayer.play(url, volume);
+    } else {
+      simpleAudio.play(url, volume);
+    }
+  },
+  onSetVolume(volume: number) {
+    volumeSlider.value = String(volume);
+    midiPlayer.setGameVolume(volume);
+    simpleAudio.setGameVolume(volume);
+  },
+  onCloseFile(file: string | null) {
+    if (file === null) {
+      midiPlayer.stop(null);
+      simpleAudio.stop(null);
+    } else {
+      if (isMidi(file)) midiPlayer.stop('/' + currentGameBase + file);
+      else simpleAudio.stop('/' + currentGameBase + file);
+    }
+  },
+  onSaveGame(filename: string, data: string) {
+    try { localStorage.setItem('qsp_' + currentGameId + '_' + filename, data); } catch {}
+  },
+  onLoadGame(filename: string): string | null {
+    try { return localStorage.getItem('qsp_' + currentGameId + '_' + filename); } catch { return null; }
+  },
 });
 
 // ─── Link interception ───────────────────────────────────────────
@@ -122,9 +205,9 @@ function handleQspLink(e: MouseEvent) {
   const anchor = (e.target as HTMLElement).closest('a');
   if (!anchor) return;
   const href = anchor.getAttribute('href') ?? '';
-  if (href.startsWith('exec:')) {
+  if (href.toLowerCase().startsWith('exec:')) {
     e.preventDefault();
-    engine.execDynamic(href.slice('exec:'.length), []);
+    engine.execDynamic(href.slice('exec:'.length).trim(), []);
     return;
   }
   const idx = parseInt(href, 10);
@@ -133,6 +216,8 @@ function handleQspLink(e: MouseEvent) {
     engine.execAction(idx - 1);
   }
 }
+
+viewImg.addEventListener('click', () => viewImg.classList.toggle('expanded'));
 
 mainText.addEventListener('click', handleQspLink);
 statText.addEventListener('click', handleQspLink);
@@ -144,6 +229,31 @@ document.addEventListener('keydown', (e) => {
   if (!msgOverlay.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'Escape')) {
     msgOverlay.classList.add('hidden');
   }
+});
+
+// ─── Menu dialog ─────────────────────────────────────────────────
+
+menuCancel.addEventListener('click', () => { menuCancelResolve?.(); menuCancelResolve = null; });
+document.addEventListener('keydown', (e) => {
+  if (!menuOverlay.classList.contains('hidden') && e.key === 'Escape') {
+    menuCancelResolve?.(); menuCancelResolve = null;
+  }
+});
+
+// ─── Volume slider ───────────────────────────────────────────────
+
+const savedVolume = localStorage.getItem('qsp_user_volume');
+if (savedVolume !== null) {
+  volumeSlider.value = savedVolume;
+  midiPlayer.setUserVolume(Number(savedVolume));
+  simpleAudio.setUserVolume(Number(savedVolume));
+}
+
+volumeSlider.addEventListener('input', () => {
+  const v = Number(volumeSlider.value);
+  midiPlayer.setUserVolume(v);
+  simpleAudio.setUserVolume(v);
+  localStorage.setItem('qsp_user_volume', String(v));
 });
 
 // ─── Input ───────────────────────────────────────────────────────
@@ -160,6 +270,7 @@ inputLine.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitInpu
 async function startGame(data: Uint8Array) {
   engine.stopTimer();
   applyColors(-1, -1, -1);
+  applyBackImage('');
   engine.loadGame(data);
   await engine.start();
   inputPanel.classList.toggle('hidden', !engine.state.showInput);
@@ -169,7 +280,12 @@ async function startGame(data: Uint8Array) {
 }
 
 restartBtn.addEventListener('click', () => {
-  if (currentGameData) startGame(currentGameData);
+  if (currentGameData) {
+    viewPanel.classList.add('hidden');
+    viewImg.classList.remove('expanded');
+    viewImg.src = '';
+    startGame(currentGameData);
+  }
 });
 
 // ─── Catalog → Player ────────────────────────────────────────────
@@ -188,6 +304,8 @@ async function playGame(meta: GameMeta) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const buffer = await resp.arrayBuffer();
     currentGameData = new Uint8Array(buffer);
+    currentGameId = meta.file.replace(/[^a-zA-Z0-9._-]/g, '_');
+    currentGameBase = meta.file.includes('/') ? meta.file.slice(0, meta.file.lastIndexOf('/') + 1) : '';
     await startGame(currentGameData);
   } catch (err) {
     mainText.textContent = `Ошибка загрузки игры: ${(err as Error).message}`;
@@ -198,7 +316,12 @@ async function playGame(meta: GameMeta) {
 
 backBtn.addEventListener('click', () => {
   engine.stopTimer();
+  midiPlayer.stop(null);
+  simpleAudio.stop(null);
   currentGameData = null;
+  viewPanel.classList.add('hidden');
+  viewImg.classList.remove('expanded');
+  viewImg.src = '';
   playerWrap.classList.add('hidden');
   catalogEl.classList.remove('hidden');
 });

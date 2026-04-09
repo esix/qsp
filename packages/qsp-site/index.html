@@ -41,6 +41,10 @@
     <header id="player-header">
       <button id="back-btn">← Каталог</button>
       <span id="player-title"></span>
+      <div id="volume-control">
+        <span id="volume-icon">♪</span>
+        <input type="range" id="volume-slider" min="0" max="100" value="100" title="Громкость">
+      </div>
       <button id="player-restart-btn" title="Начать заново">&#8635;</button>
     </header>
 
@@ -50,6 +54,9 @@
       </main>
 
       <aside id="side-panel">
+        <div id="view-panel" class="hidden">
+          <img id="view-img" alt="">
+        </div>
         <section id="actions-panel">
           <h2>Действия</h2>
           <ul id="actions-list"></ul>
@@ -74,6 +81,13 @@
       <div id="msg-box">
         <div id="msg-text"></div>
         <button id="msg-ok">OK</button>
+      </div>
+    </div>
+
+    <div id="menu-overlay" class="hidden">
+      <div id="menu-box">
+        <ul id="menu-list"></ul>
+        <button id="menu-cancel">Отмена</button>
       </div>
     </div>
   </div>

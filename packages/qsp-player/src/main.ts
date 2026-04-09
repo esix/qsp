@@ -53,7 +53,7 @@ const engine = new QspEngine();
  * round-trip through the HTML parser preserves the original & characters.
  */
 function protectExecHrefs(html: string): string {
-  return html.replace(/href="exec:([^"]*)"/g, (_, cmd) =>
+  return html.replace(/href="exec:([^"]*)"/gi, (_, cmd) =>
     `href="exec:${cmd.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#)/g, '&amp;')}"`
   );
 }
@@ -125,6 +125,14 @@ engine.on({
   onColorsChanged(bcolor: number, fcolor: number, lcolor: number) {
     applyColors(bcolor, fcolor, lcolor);
   },
+
+  onSaveGame(filename: string, data: string) {
+    try { localStorage.setItem('qsp_' + currentGameId + '_' + filename, data); } catch {}
+  },
+
+  onLoadGame(filename: string): string | null {
+    try { return localStorage.getItem('qsp_' + currentGameId + '_' + filename); } catch { return null; }
+  },
 });
 
 // ─── HTML link interception ──────────────────────────────────────
@@ -136,10 +144,10 @@ function handleQspLink(e: MouseEvent) {
 
   const href = anchor.getAttribute('href') ?? '';
 
-  // exec: links run an arbitrary QSP command, e.g. <a href="exec:gt'location'">
-  if (href.startsWith('exec:')) {
+  // exec: links run an arbitrary QSP command, e.g. <a href="exec:gt'location'"> or <a href="EXEC: gt 'location'">
+  if (href.toLowerCase().startsWith('exec:')) {
     e.preventDefault();
-    engine.execDynamic(href.slice('exec:'.length), []);
+    engine.execDynamic(href.slice('exec:'.length).trim(), []);
     return;
   }
 
@@ -176,6 +184,7 @@ inputLine.addEventListener('keydown', (e) => {
 // ─── File loading ────────────────────────────────────────────────
 
 let currentGameData: Uint8Array | null = null;
+let currentGameId = '';
 
 async function startGame(data: Uint8Array) {
   try {
@@ -201,6 +210,7 @@ async function startGame(data: Uint8Array) {
 async function loadFile(file: File) {
   const buffer = await file.arrayBuffer();
   currentGameData = new Uint8Array(buffer);
+  currentGameId = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   await startGame(currentGameData);
 }
 

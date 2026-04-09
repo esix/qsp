@@ -72,6 +72,9 @@ export const KEYWORDS = new Set([
   'CLEAR', 'CLR', '*CLEAR', '*CLR',
   'CLS', 'CLA',
 
+  // Actions
+  'DEL ACT', 'DELACT',
+
   // Objects
   'ADDOBJ', 'ADD OBJ',
   'DELOBJ', 'DEL OBJ',
@@ -90,7 +93,7 @@ export const KEYWORDS = new Set([
   'MENU', 'UNSELECT', 'UNSEL',
 
   // Audio
-  'PLAY', 'CLOSE',
+  'PLAY', 'CLOSE', 'SETVOL',
 
   // Execution
   'DYNAMIC', 'EXEC',
@@ -116,10 +119,10 @@ export const KEYWORDS = new Set([
   'STRCOMP', 'STRFIND', 'STRPOS',
   'MID', 'INSTR', 'REPLACE',
   'FUNC', 'DYNEVAL',
-  'COUNTOBJ', 'MSECSCOUNT',
-  'QSPVER', 'CURLOC', 'SELOBJ', 'SELACT',
-  'MAINTXT', 'STATTXT', 'CURACTS',
-  'USER_TEXT', 'USRTXT',
+  // Note: zero-argument expression keywords (COUNTOBJ, MSECSCOUNT, CURLOC, SELOBJ,
+  // SELACT, MAINTXT, STATTXT, CURACTS, USER_TEXT, USRTXT, QSPVER) are intentionally
+  // NOT in KEYWORDS — they're plain identifiers resolved by the evaluator's variable
+  // lookup. Keeping them as keywords causes "COUNTOBJ - x" to parse as COUNTOBJ(-x).
 
   // Special system variables used as identifiers
   'USEHTML', 'BCOLOR', 'FCOLOR', 'LCOLOR',

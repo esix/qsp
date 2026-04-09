@@ -249,6 +249,11 @@ export class Parser {
       case '*CLR':   { this.advance(); return { kind: 'ClearStmt', target: 'main', loc: l }; }
       case 'CLA':    { this.advance(); return { kind: 'ClaStmt', loc: l }; }
       case 'CLS':    { this.advance(); return { kind: 'ClsStmt', loc: l }; }
+      case 'DEL ACT':
+      case 'DELACT': {
+        this.advance();
+        return { kind: 'DelActStmt', name: this.parseExpression(), loc: l };
+      }
 
       // Objects
       case 'ADD OBJ':
@@ -323,6 +328,10 @@ export class Parser {
       case 'CLOSE ALL': {
         this.advance();
         return { kind: 'CloseStmt', all: true, loc: l };
+      }
+      case 'SETVOL': {
+        this.advance();
+        return { kind: 'SetVolStmt', volume: this.parseExpression(), loc: l };
       }
 
       // Execution
@@ -812,11 +821,13 @@ export class Parser {
     // Function call without parentheses: keyword followed by an expression starter.
     // e.g. obj 'name', loc 'name', len 'str', rand 1,6
     // Only applies to Keyword tokens (not plain identifiers which could be variables).
+    // IMPORTANT: parse args at comparison level (not full expression) so that
+    // `obj 'x' and cond` doesn't swallow `and cond` as part of the OBJ argument.
     if (t.type === TokenType.Keyword && this.canStartExpression()) {
       const args: Expr[] = [];
-      args.push(this.parseExpression());
+      args.push(this.parseComparison());
       while (this.consumeIf(TokenType.Comma)) {
-        args.push(this.parseExpression());
+        args.push(this.parseComparison());
       }
       return { kind: 'FunctionCall', name, args, loc: l };
     }
