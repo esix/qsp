@@ -71,6 +71,38 @@ export class QspVariableStore {
     arr.set(index, value);
   }
 
+  /** Set only the string component of a slot (for $var assignments) */
+  setStr(name: string, index: number, value: QspValue): void {
+    const cn = this.canonical(name);
+    let arr = this.vars.get(cn);
+    if (!arr) {
+      arr = new Map();
+      this.vars.set(cn, arr);
+    }
+    const existing = arr.get(index);
+    if (existing) {
+      arr.set(index, { num: existing.num, str: value.str, isString: value.isString });
+    } else {
+      arr.set(index, { num: 0, str: value.str, isString: value.isString });
+    }
+  }
+
+  /** Set only the numeric component of a slot (for var assignments) */
+  setNum(name: string, index: number, value: QspValue): void {
+    const cn = this.canonical(name);
+    let arr = this.vars.get(cn);
+    if (!arr) {
+      arr = new Map();
+      this.vars.set(cn, arr);
+    }
+    const existing = arr.get(index);
+    if (existing) {
+      arr.set(index, { num: value.num, str: existing.str, isString: existing.isString });
+    } else {
+      arr.set(index, { num: value.num, str: '' });
+    }
+  }
+
   /** Get value by string key (for associative arrays) */
   getByKey(name: string, key: string): QspValue {
     const cn = this.canonical(name);
@@ -82,7 +114,7 @@ export class QspVariableStore {
   }
 
   /** Set value by string key */
-  setByKey(name: string, key: string, value: QspValue): void {
+  setByKey(name: string, key: string, value: QspValue, setter: 'set' | 'setStr' | 'setNum' = 'set'): void {
     const cn = this.canonical(name);
     let idxMap = this.indices.get(cn);
     if (!idxMap) {
@@ -95,7 +127,7 @@ export class QspVariableStore {
       idx = this.arraySize(name);
       idxMap.set(uk, idx);
     }
-    this.set(name, idx, value);
+    this[setter](name, idx, value);
   }
 
   /** Get the size of an array */

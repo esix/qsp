@@ -82,11 +82,12 @@ function isMidi(file: string): boolean {
 
 /** Resolve a game-relative asset path to a usable URL */
 function resolveAssetUrl(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
   if (localAssets) {
-    const url = localAssets.get(path.toLowerCase());
+    const url = localAssets.get(normalized.toLowerCase());
     if (url) return url;
   }
-  return '/' + currentGameBase + path;
+  return '/' + currentGameBase + normalized;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -327,12 +328,20 @@ async function startGame(data: Uint8Array) {
   objectsPanel.classList.toggle('hidden', !engine.state.showObjs || engine.state.objects.length === 0);
 }
 
-restartBtn.addEventListener('click', () => {
+restartBtn.addEventListener('click', async () => {
   if (currentGameData) {
     viewPanel.classList.add('hidden');
     viewImg.classList.remove('expanded');
     viewImg.src = '';
-    startGame(currentGameData);
+    engine.stopTimer();
+    applyColors(-1, -1, -1);
+    applyBackImage('');
+    engine.loadGame(currentGameData);
+    await engine.startFresh();
+    inputPanel.classList.toggle('hidden', !engine.state.showInput);
+    statPanel.classList.toggle('hidden', !engine.state.showStat);
+    actionsPanel.classList.toggle('hidden', !engine.state.showActs);
+    objectsPanel.classList.toggle('hidden', !engine.state.showObjs || engine.state.objects.length === 0);
   }
 });
 

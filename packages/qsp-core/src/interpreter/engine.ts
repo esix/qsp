@@ -57,8 +57,32 @@ export class QspEngine {
     );
   }
 
-  /** Start the game — execute location 0 */
+  /** Start the game — try loading autosave, fall back to location 0 */
   async start(): Promise<void> {
+    if (!this.game || this.locations.length === 0) {
+      throw new Error('No game loaded');
+    }
+    // Try to resume from autosave
+    const saveData = this.callbacks.onLoadGame?.('autosave.sav') ?? null;
+    if (saveData) {
+      try {
+        await this.executor.restoreSave(saveData);
+      } catch (e) {
+        if (e instanceof GotoSignal) {
+          await this.gotoLocation(e.locName, e.args, e.extended);
+          this.startTimer();
+          return;
+        }
+        // Autosave invalid or incompatible — start fresh
+        this.state.reset();
+      }
+    }
+    await this.gotoLocation(this.locations[0].name, [], false);
+    this.startTimer();
+  }
+
+  /** Start the game fresh — ignore autosave */
+  async startFresh(): Promise<void> {
     if (!this.game || this.locations.length === 0) {
       throw new Error('No game loaded');
     }

@@ -131,12 +131,7 @@ export class Executor {
       }
 
       case 'ActStmt': {
-        // Store the raw string (preserving <<expr>> markers) so notifyUI can
-        // re-substitute on every render. For string literals use .value directly;
-        // for complex expressions evaluate now (they won't contain <<>> markers).
-        const name = stmt.name.kind === 'StringLiteral'
-          ? stmt.name.value
-          : (await this.evaluator.eval(stmt.name)).str;
+        const name = await this.sub((await this.evaluator.eval(stmt.name)).str);
         const image = !stmt.image ? '' : stmt.image.kind === 'StringLiteral'
           ? stmt.image.value
           : (await this.evaluator.eval(stmt.image)).str;
@@ -418,33 +413,10 @@ export class Executor {
       }
 
       case 'OpenGameStmt': {
-        const filename = stmt.file ? (await this.evaluator.eval(stmt.file)).str : 'save.sav';
+        const filename = stmt.file ? (await this.evaluator.eval(stmt.file)).str : 'autosave.sav';
         const saveData = this.callbacks.onLoadGame?.(filename) ?? null;
         if (!saveData) return;
-        try {
-          const d = JSON.parse(saveData);
-          if (d.v !== 1) return;
-          // Restore variables (game progress)
-          if (d.variables) this.state.variables.deserialize(d.variables);
-          // Restore system settings
-          this.state.useHtml = d.useHtml ?? false;
-          this.state.timerInterval = d.timerInterval ?? 500;
-          this.state.showActs = d.showActs ?? true;
-          this.state.showObjs = d.showObjs ?? true;
-          this.state.showStat = d.showStat ?? true;
-          this.state.showInput = d.showInput ?? true;
-          this.state.bcolor = d.bcolor ?? -1;
-          this.state.fcolor = d.fcolor ?? -1;
-          this.state.lcolor = d.lcolor ?? -1;
-          // Fire $ONGLOAD hook before navigating
-          const onLoad = this.state.variables.get('$ONGLOAD', 0).str;
-          if (onLoad) await this.execLocationByName(onLoad, []);
-          // Re-run the saved location (text/actions regenerate from restored variables)
-          if (d.curLocName) throw new GotoSignal(d.curLocName, [], false);
-        } catch (e) {
-          if (e instanceof GotoSignal) throw e;
-          console.error('Failed to load save:', e);
-        }
+        await this.restoreSave(saveData);
         return;
       }
 
@@ -454,6 +426,30 @@ export class Executor {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────
+
+  /** Restore game state from a save JSON string. Throws GotoSignal to navigate to saved location. */
+  async restoreSave(saveData: string): Promise<void> {
+    try {
+      const d = JSON.parse(saveData);
+      if (d.v !== 1) throw new Error('Incompatible save version');
+      if (d.variables) this.state.variables.deserialize(d.variables);
+      this.state.useHtml = d.useHtml ?? false;
+      this.state.timerInterval = d.timerInterval ?? 500;
+      this.state.showActs = d.showActs ?? true;
+      this.state.showObjs = d.showObjs ?? true;
+      this.state.showStat = d.showStat ?? true;
+      this.state.showInput = d.showInput ?? true;
+      this.state.bcolor = d.bcolor ?? -1;
+      this.state.fcolor = d.fcolor ?? -1;
+      this.state.lcolor = d.lcolor ?? -1;
+      const onLoad = this.state.variables.get('$ONGLOAD', 0).str;
+      if (onLoad) await this.execLocationByName(onLoad, []);
+      if (d.curLocName) throw new GotoSignal(d.curLocName, [], false);
+    } catch (e) {
+      if (e instanceof GotoSignal) throw e;
+      throw e; // Re-throw parse/version errors
+    }
+  }
 
   buildSaveData(): string {
     const curLoc = this.locations[this.state.curLoc];
@@ -517,16 +513,21 @@ export class Executor {
       return;
     }
 
+    // In QSP, $var and var share a slot but store string and number independently.
+    // Use setStr/setNum to only update the relevant component.
+    const isStr = name.startsWith('$');
+    const setter = isStr ? 'setStr' : 'setNum';
+
     if (indexExpr) {
       const v = await this.evaluator.eval(indexExpr);
       if (v.str) {
         const key = await this.evaluator.substitute(v.str);
-        this.state.variables.setByKey(name, key, value);
+        this.state.variables.setByKey(name, key, value, setter);
         return;
       }
-      this.state.variables.set(name, v.num, value);
+      this.state.variables[setter](name, v.num, value);
     } else {
-      this.state.variables.set(name, 0, value);
+      this.state.variables[setter](name, 0, value);
     }
   }
 
