@@ -1,6 +1,7 @@
 import { QspEngine } from 'qsp-core/interpreter/engine.js';
 import type { QspRuntimeAction, QspObject } from 'qsp-core/interpreter/state.js';
-import { MidiAudioPlayer, SimpleAudioPlayer } from './audio.js';
+import { MidiAudioPlayer, SimpleAudioPlayer } from 'qsp-player/audio.js';
+import { collectDroppedFiles, collectFromFile, prepareLocalGame, revokeAssets } from 'qsp-player/local-files.js';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -51,12 +52,41 @@ let currentGameData: Uint8Array | null = null;
 let currentGameId = '';
 let currentGameBase = '';
 let menuCancelResolve: (() => void) | null = null;
+/** When a local game is loaded (drag-drop), maps lowercase relative path → blob URL */
+let localAssets: Map<string, string> | null = null;
 
 const midiPlayer = new MidiAudioPlayer();
 const simpleAudio = new SimpleAudioPlayer();
 
+// When a non-MIDI file finishes playing naturally, remove it from the engine's
+// playingFiles set so that ISPLAY() correctly returns false afterwards.
+simpleAudio.onFileEnded = (url: string) => {
+  if (localAssets) {
+    // For local games, find the original relative path that maps to this blob URL
+    for (const [path, blobUrl] of localAssets) {
+      if (blobUrl === url) {
+        engine.state.playingFiles.delete(path.toUpperCase());
+        return;
+      }
+    }
+  }
+  // Server-hosted: strip the leading "/<gameBase>" to recover the game-relative path.
+  const base = '/' + currentGameBase;
+  const relative = url.startsWith(base) ? url.slice(base.length) : url.replace(/^\//, '');
+  engine.state.playingFiles.delete(relative.toUpperCase());
+};
+
 function isMidi(file: string): boolean {
   return /\.(mid|midi)$/i.test(file);
+}
+
+/** Resolve a game-relative asset path to a usable URL */
+function resolveAssetUrl(path: string): string {
+  if (localAssets) {
+    const url = localAssets.get(path.toLowerCase());
+    if (url) return url;
+  }
+  return '/' + currentGameBase + path;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -77,16 +107,25 @@ function applyColors(bcolor: number, fcolor: number, lcolor: number) {
 function applyBackImage(path: string) {
   const mainPanel = document.getElementById('main-panel')!;
   if (path) {
-    mainPanel.style.setProperty('--game-backimage', `url('/${currentGameBase}${path}')`);
+    mainPanel.style.setProperty('--game-backimage', `url('${resolveAssetUrl(path)}')`);
   } else {
     mainPanel.style.removeProperty('--game-backimage');
   }
 }
 
 function protectExecHrefs(html: string): string {
-  return html.replace(/href="exec:([^"]*)"/g, (_, cmd) =>
-    `href="exec:${cmd.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#)/g, '&amp;')}"`
+  return html.replace(/href="exec:([^"]*)"/gi, (_, cmd) =>
+    `href="exec:${cmd.replace(/&/g, '&amp;')}"`
   );
+}
+
+/** Rewrite src="..." attributes in HTML to use resolved asset URLs.
+ *  Handles quoted (src="path") and unquoted (src=path) attributes. */
+function resolveHtmlAssets(html: string): string {
+  return html.replace(/\b(src=)(["']?)([^"' >]+)\2/gi, (match, pre, quote, path) => {
+    if (/^(https?:|data:|blob:)/i.test(path)) return match;
+    return pre + (quote || '"') + resolveAssetUrl(path) + (quote || '"');
+  });
 }
 
 // ─── Engine callbacks ────────────────────────────────────────────
@@ -94,7 +133,7 @@ function protectExecHrefs(html: string): string {
 engine.on({
   onMainTextChanged(text) {
     if (engine.state.useHtml) {
-      mainText.innerHTML = protectExecHrefs(text);
+      mainText.innerHTML = resolveHtmlAssets(protectExecHrefs(text));
     } else {
       mainText.textContent = text;
     }
@@ -102,7 +141,7 @@ engine.on({
   },
   onStatTextChanged(text) {
     if (engine.state.useHtml) {
-      statText.innerHTML = protectExecHrefs(text);
+      statText.innerHTML = resolveHtmlAssets(protectExecHrefs(text));
     } else {
       statText.textContent = text;
     }
@@ -112,7 +151,7 @@ engine.on({
     actionsList.innerHTML = '';
     for (let i = 0; i < actions.length; i++) {
       const li = document.createElement('li');
-      if (engine.state.useHtml) li.innerHTML = actions[i].name;
+      if (engine.state.useHtml) li.innerHTML = resolveHtmlAssets(actions[i].name);
       else li.textContent = actions[i].name;
       li.addEventListener('click', () => engine.execAction(i));
       actionsList.appendChild(li);
@@ -123,7 +162,7 @@ engine.on({
     objectsList.innerHTML = '';
     for (let i = 0; i < objects.length; i++) {
       const li = document.createElement('li');
-      if (engine.state.useHtml) li.innerHTML = objects[i].name;
+      if (engine.state.useHtml) li.innerHTML = resolveHtmlAssets(objects[i].name);
       else li.textContent = objects[i].name;
       li.addEventListener('click', () => engine.selectObject(i));
       objectsList.appendChild(li);
@@ -148,7 +187,7 @@ engine.on({
       viewPanel.classList.add('hidden');
       viewImg.src = '';
     } else {
-      viewImg.src = '/' + currentGameBase + path;
+      viewImg.src = resolveAssetUrl(path);
       viewPanel.classList.remove('hidden');
     }
   },
@@ -170,7 +209,7 @@ engine.on({
     });
   },
   onPlayFile(file: string, volume: number) {
-    const url = '/' + currentGameBase + file;
+    const url = resolveAssetUrl(file);
     if (isMidi(file)) {
       midiPlayer.play(url, volume);
     } else {
@@ -187,8 +226,9 @@ engine.on({
       midiPlayer.stop(null);
       simpleAudio.stop(null);
     } else {
-      if (isMidi(file)) midiPlayer.stop('/' + currentGameBase + file);
-      else simpleAudio.stop('/' + currentGameBase + file);
+      const url = resolveAssetUrl(file);
+      if (isMidi(file)) midiPlayer.stop(url);
+      else simpleAudio.stop(url);
     }
   },
   onSaveGame(filename: string, data: string) {
@@ -196,6 +236,14 @@ engine.on({
   },
   onLoadGame(filename: string): string | null {
     try { return localStorage.getItem('qsp_' + currentGameId + '_' + filename); } catch { return null; }
+  },
+  async onLoadQst(filename: string): Promise<Uint8Array | null> {
+    try {
+      const url = resolveAssetUrl(filename);
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      return new Uint8Array(await resp.arrayBuffer());
+    } catch { return null; }
   },
 });
 
@@ -319,12 +367,20 @@ backBtn.addEventListener('click', () => {
   midiPlayer.stop(null);
   simpleAudio.stop(null);
   currentGameData = null;
+  revokeLocalAssets();
   viewPanel.classList.add('hidden');
   viewImg.classList.remove('expanded');
   viewImg.src = '';
   playerWrap.classList.add('hidden');
   catalogEl.classList.remove('hidden');
 });
+
+function revokeLocalAssets() {
+  if (localAssets) {
+    revokeAssets(localAssets);
+    localAssets = null;
+  }
+}
 
 // ─── Catalog rendering ───────────────────────────────────────────
 
@@ -356,3 +412,64 @@ function renderCatalog(games: GameMeta[]) {
 }
 
 loadCatalog();
+
+// ─── Drag-and-drop & file-input local game loading ──────────────
+
+const dropZone = $('drop-zone');
+const fileInput = $('file-input') as HTMLInputElement;
+const fileBtn = $('file-btn');
+
+// Prevent default on the whole catalog so the browser doesn't navigate away
+catalogEl.addEventListener('dragover', (e) => e.preventDefault());
+catalogEl.addEventListener('dragenter', (e) => e.preventDefault());
+
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragenter', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', handleDrop);
+// Also listen on catalog for convenience (files dropped anywhere on page)
+catalogEl.addEventListener('drop', handleDrop);
+
+fileBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+  try {
+    const files = await collectFromFile(file);
+    await playLocalGame(files);
+  } catch (err) {
+    alert('Ошибка: ' + (err as Error).message);
+  }
+  fileInput.value = '';
+});
+
+async function handleDrop(e: Event) {
+  e.preventDefault();
+  e.stopPropagation();
+  dropZone.classList.remove('dragover');
+  const de = e as DragEvent;
+  try {
+    const files = await collectDroppedFiles(de);
+    await playLocalGame(files);
+  } catch (err) {
+    alert('Ошибка: ' + (err as Error).message);
+  }
+}
+
+/** Load and start a local game from collected files */
+async function playLocalGame(files: Map<string, Blob>) {
+  revokeLocalAssets();
+  const { qspData, title, assets } = await prepareLocalGame(files);
+  localAssets = assets;
+
+  playerTitle.textContent = title;
+  catalogEl.classList.add('hidden');
+  playerWrap.classList.remove('hidden');
+  mainText.textContent = 'Загрузка…';
+  actionsList.innerHTML = '';
+
+  currentGameData = qspData;
+  currentGameId = 'local_' + title.replace(/[^a-zA-Z0-9._-]/g, '_');
+  currentGameBase = '';
+  await startGame(qspData);
+}

@@ -225,6 +225,7 @@ export interface QspCallbacks {
   onSetVolume?(volume: number): void;
   onColorsChanged?(bcolor: number, fcolor: number, lcolor: number): void;
   onBackImage?(path: string): void;
+  onLoadQst?(filename: string): Promise<Uint8Array | null>;
 }
 
 /** The complete mutable game state */

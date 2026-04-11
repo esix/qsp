@@ -153,6 +153,45 @@ a { color: var(--accent); }
 
 .play-btn:hover { background: var(--accent2); }
 
+/* Drop zone */
+
+#drop-section {
+  margin-top: 40px;
+}
+
+#drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 15px;
+  transition: border-color .15s, color .15s;
+}
+
+#drop-zone.dragover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#drop-or {
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+#file-btn {
+  padding: 8px 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: sans-serif;
+  cursor: pointer;
+}
+
+#file-btn:hover { border-color: var(--accent); }
+
 /* Footer */
 
 #site-footer {

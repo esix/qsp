@@ -9,9 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "midi-player-js": "^2.0.17",
     "qsp-core": "*",
-    "soundfont-player": "^0.12.0"
+    "qsp-player": "*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

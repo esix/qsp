@@ -180,17 +180,11 @@ export class Lexer {
           }
           break;
         case '!':
-          // ! can be not-equal operator when followed by an identifier/value
-          // or a comment when followed by space/end-of-line
-          if (this.pos + 1 < this.source.length) {
-            const next = this.source[this.pos + 1];
-            if (this.isAlpha(next) || next === '$' || next === '(' || next === "'" || next === '"' || next === '{' || this.isDigit(next)) {
-              this.addToken(TokenType.NotEqual, '!');
-              this.advance();
-              break;
-            }
-          }
-          this.readComment();
+          // When we reach here, atStatementStart is already false (set above the switch).
+          // Statement-start comments (! ...) are handled earlier in the main loop.
+          // So here, ! is always the not-equal operator.
+          this.addToken(TokenType.NotEqual, '!');
+          this.advance();
           break;
         default:
           // Skip unknown characters

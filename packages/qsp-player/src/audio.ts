@@ -220,6 +220,8 @@ export class SimpleAudioPlayer {
   private playing = new Map<string, HTMLAudioElement>();
   private _gameVolume = 1.0;  // set by PLAY / SETVOL
   private _userVolume = 1.0;  // set by the slider
+  /** Called when a file finishes playing naturally (not stopped manually) */
+  onFileEnded?: (url: string) => void;
 
   /** Called by SETVOL — sets game volume and syncs with user slider */
   setGameVolume(volume: number): void {
@@ -249,8 +251,10 @@ export class SimpleAudioPlayer {
     }
     const audio = new Audio(url);
     audio.volume = v;
-    audio.loop = true;
-    audio.onerror = () => { audio.loop = false; }; // stop retrying on error
+    audio.addEventListener('ended', () => {
+      this.playing.delete(url.toUpperCase());
+      this.onFileEnded?.(url);
+    });
     audio.play().catch(() => {});
     this.playing.set(url.toUpperCase(), audio);
   }

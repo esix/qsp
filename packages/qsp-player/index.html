@@ -11,22 +11,33 @@
     <header id="header">
       <h1>QSP Player</h1>
       <label id="file-label">
-        <span>Load .qsp file</span>
-        <input type="file" id="file-input" accept=".qsp">
+        <span>Load file</span>
+        <input type="file" id="file-input" accept=".qsp,.zip">
       </label>
+      <label id="folder-label">
+        <span>Load folder</span>
+        <input type="file" id="folder-input" webkitdirectory>
+      </label>
+      <div id="volume-control" class="hidden">
+        <span id="volume-icon">&#9834;</span>
+        <input type="range" id="volume-slider" min="0" max="100" value="100" title="Volume">
+      </div>
       <button id="restart-btn" class="hidden" title="Restart game">&#8635;</button>
     </header>
 
     <div id="drop-zone">
       <div id="drop-zone-content">
         <div id="drop-icon">&#128218;</div>
-        <p>Drop a <strong>.qsp</strong> file here</p>
+        <p>Drop a game folder, ZIP archive, or <strong>.qsp</strong> file here</p>
         <p class="dim">or use the button above</p>
       </div>
     </div>
 
     <div id="drop-overlay" class="hidden">
-      <div id="drop-overlay-content">Drop .qsp to load</div>
+      <div id="drop-overlay-content">
+        <div id="drop-overlay-icon">&#128218;</div>
+        <p>Drop a game folder, ZIP archive, or <strong>.qsp</strong> file here</p>
+      </div>
     </div>
 
     <div id="game" class="hidden">
@@ -35,11 +46,13 @@
       </main>
 
       <aside id="side-panel">
+        <div id="view-panel" class="hidden">
+          <img id="view-img" alt="">
+        </div>
         <section id="actions-panel">
           <h2>Actions</h2>
           <ul id="actions-list"></ul>
         </section>
-
         <section id="objects-panel">
           <h2>Inventory</h2>
           <ul id="objects-list"></ul>
@@ -60,6 +73,13 @@
       <div id="msg-box">
         <div id="msg-text"></div>
         <button id="msg-ok">OK</button>
+      </div>
+    </div>
+
+    <div id="menu-overlay" class="hidden">
+      <div id="menu-box">
+        <ul id="menu-list"></ul>
+        <button id="menu-cancel">Cancel</button>
       </div>
     </div>
   </div>

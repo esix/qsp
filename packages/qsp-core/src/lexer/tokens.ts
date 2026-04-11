@@ -105,7 +105,7 @@ export const KEYWORDS = new Set([
   'CMDCLEAR', 'CMDCLR',
 
   // Files
-  'OPENQST', 'OPENGAME', 'SAVEGAME', 'INCLIB', 'FREELIB',
+  'OPENQST', 'OPENGAME', 'SAVEGAME', 'INCLIB', 'ADDQST', 'FREELIB',
 
   // Functions (built-in, treated as keywords in function call context)
   'LOC', 'OBJ', 'MIN', 'MAX', 'RAND', 'RND',

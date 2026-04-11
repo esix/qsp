@@ -364,7 +364,8 @@ export class Parser {
         if (!this.isStatementEnd()) file = this.parseExpression();
         return { kind: 'SaveGameStmt', file, loc: l };
       }
-      case 'INCLIB':  { this.advance(); return { kind: 'IncLibStmt', file: this.parseExpression(), loc: l }; }
+      case 'INCLIB':
+      case 'ADDQST':  { this.advance(); return { kind: 'IncLibStmt', file: this.parseExpression(), loc: l }; }
       case 'FREELIB': { this.advance(); return { kind: 'FreeLibStmt', loc: l }; }
 
       default: {
@@ -623,7 +624,15 @@ export class Parser {
 
     let index: Expr | undefined;
     if (this.consumeIf(TokenType.LeftBracket)) {
-      index = this.parseExpression();
+      if (this.match(TokenType.RightBracket)) {
+        // Empty brackets: var[] = value → append to next free index
+        // Desugar to var[ARRSIZE('name')] = value
+        index = { kind: 'FunctionCall', name: 'ARRSIZE', args: [
+          { kind: 'StringLiteral', value: name, loc: l }
+        ], loc: l };
+      } else {
+        index = this.parseExpression();
+      }
       this.expect(TokenType.RightBracket);
     }
 

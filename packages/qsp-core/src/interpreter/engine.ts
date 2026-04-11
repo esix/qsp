@@ -94,9 +94,6 @@ export class QspEngine {
     }
 
     this.state.actions = [];
-    for (const act of loc.actions) {
-      this.state.actions.push({ name: act.name, image: act.image, code: act.code });
-    }
     // Clear UI actions immediately so stale buttons from the previous location
     // don't remain visible during long-running code (e.g. WAIT-heavy dialogs).
     this.callbacks.onActionsChanged?.(this.state.actions);
@@ -116,6 +113,14 @@ export class QspEngine {
         } else {
           throw e;
         }
+      }
+    }
+
+    // Binary-format actions are a fallback: only add them if the code
+    // didn't define any actions itself (via ACT statements).
+    if (this.state.actions.length === 0 && loc.actions.length > 0) {
+      for (const act of loc.actions) {
+        this.state.actions.push({ name: act.name, image: act.image, code: act.code });
       }
     }
 
@@ -218,10 +223,30 @@ export class QspEngine {
     await this.notifyUI();
   }
 
-  /** Handle user text input */
-  submitInput(text: string): void {
-    this.state.variables.set('$USER_TEXT', 0, { num: 0, str: text });
-    this.state.variables.set('$USRTXT', 0, { num: 0, str: text });
+  /** Handle user text input — sets $USER_TEXT/$USRTXT and runs $USERCOM handler */
+  async submitInput(text: string): Promise<void> {
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      this.state.variables.set('$USER_TEXT', 0, { num: 0, str: text });
+      this.state.variables.set('$USRTXT', 0, { num: 0, str: text });
+
+      const handler = this.state.variables.get('$USERCOM', 0).str;
+      if (handler) {
+        try {
+          await this.executor.execLocationByName(handler, []);
+        } catch (e) {
+          if (e instanceof GotoSignal) {
+            await this.gotoLocation(e.locName, e.args, e.extended);
+          } else if (!(e instanceof ExitSignal)) {
+            throw e;
+          }
+        }
+        await this.notifyUI();
+      }
+    } finally {
+      this._busy = false;
+    }
   }
 
   /** Start the timer (calls $COUNTER location periodically) */

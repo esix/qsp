@@ -59,12 +59,12 @@ export class Evaluator {
         switch (expr.op) {
           // Arithmetic
           case '+': {
-            // String concat if either side is string-typed or has a non-empty string value
-            if (left.isString || right.isString || left.str || right.str) {
-              // Use .str directly for string-typed values (preserves empty string '');
-              // fall back to String(num) for numeric values coerced into string context.
-              const ls = left.isString ? left.str : (left.str || String(left.num));
-              const rs = right.isString ? right.str : (right.str || String(right.num));
+            // String concat only when either side has actual string content.
+            // The isString flag (from $-prefixed variables) does NOT force concat —
+            // e.g. `$var = 1; $var = $var + 1` must do numeric addition (→ 2).
+            if (left.str || right.str) {
+              const ls = left.str || String(left.num);
+              const rs = right.str || String(right.num);
               return strVal(ls + rs);
             }
             return numVal(left.num + right.num);
@@ -165,7 +165,8 @@ export class Evaluator {
     return this.markString(isStr, this.state.variables.get(name, 0));
   }
 
-  /** For $-prefixed variables, ensure isString is set so <<$var>> substitutes '' not '0' */
+  /** For $-prefixed variables, ensure isString flag is set.
+   *  Do NOT coerce .str here — that would break `$var + 1` (numeric addition). */
   private markString(isStr: boolean, v: QspValue): QspValue {
     return isStr && !v.isString ? { ...v, isString: true } : v;
   }
@@ -203,9 +204,9 @@ export class Evaluator {
         return isTruthy(await arg(0)) ? arg(1) : arg(2);
       }
       case 'RGB': {
-        const r = (await arg(0)).num & 0xFF;
-        const g = (await arg(1)).num & 0xFF;
-        const b = (await arg(2)).num & 0xFF;
+        const r = Math.max(0, Math.min(255, (await arg(0)).num));
+        const g = Math.max(0, Math.min(255, (await arg(1)).num));
+        const b = Math.max(0, Math.min(255, (await arg(2)).num));
         return numVal(r | (g << 8) | (b << 16));
       }
 
@@ -284,6 +285,9 @@ export class Evaluator {
       // ─── Array functions ───────────
       case 'ARRSIZE': {
         const name = (await arg(0)).str;
+        const uname = name.toUpperCase().replace(/^\$/, '');
+        // ARGS is stored separately from regular variables
+        if (uname === 'ARGS') return numVal(this.state.args.length);
         let size = this.state.variables.arraySize(name);
         if (size === 0) {
           // In QSP, $varname and varname share the same array — check alternate prefix

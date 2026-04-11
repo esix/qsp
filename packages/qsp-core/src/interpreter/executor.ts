@@ -4,6 +4,7 @@ import type { GameState, QspValue, QspCallbacks, QspRuntimeAction } from './stat
 import { numVal, strVal } from './state.js';
 import { Evaluator } from './evaluator.js';
 import { Parser } from '../ast/parser.js';
+import { parseQsp } from '../parser/qsp-parser.js';
 
 /** Signals for non-local control flow */
 export class GotoSignal {
@@ -23,6 +24,8 @@ export class JumpSignal {
 export class Executor {
   private evaluator: Evaluator;
   private parser = new Parser();
+  /** Stack tracking loaded libraries for FREELIB support */
+  private libStack: { startIdx: number; count: number }[] = [];
 
   constructor(
     private state: GameState,
@@ -376,9 +379,37 @@ export class Executor {
         return;
 
       case 'OpenQstStmt':
-      case 'IncLibStmt':
-      case 'FreeLibStmt':
+      case 'IncLibStmt': {
+        const file = (await this.evaluator.eval(stmt.file)).str;
+        if (!file || !this.callbacks.onLoadQst) return;
+        const data = await this.callbacks.onLoadQst(file);
+        if (!data) return;
+        try {
+          const lib = parseQsp(data);
+          const startIdx = this.locations.length;
+          let count = 0;
+          for (const loc of lib.locations) {
+            if (!this.locations.some(l => l.name.toUpperCase() === loc.name.toUpperCase())) {
+              this.locations.push(loc);
+              count++;
+            }
+          }
+          if (count > 0) {
+            this.libStack.push({ startIdx, count });
+          }
+        } catch (e) {
+          console.warn('INCLIB/ADDQST failed for', file, e);
+        }
         return;
+      }
+
+      case 'FreeLibStmt': {
+        const entry = this.libStack.pop();
+        if (entry) {
+          this.locations.splice(entry.startIdx, entry.count);
+        }
+        return;
+      }
 
       case 'SaveGameStmt': {
         const filename = stmt.file ? (await this.evaluator.eval(stmt.file)).str : 'autosave.sav';
@@ -475,6 +506,7 @@ export class Executor {
       case '$ONOBJSEL': this.state.variables.set(uname, 0, value); return;
       case '$ONGSAVE': this.state.variables.set(uname, 0, value); return;
       case '$ONGLOAD': this.state.variables.set(uname, 0, value); return;
+      case '$USERCOM': this.state.variables.set(uname, 0, value); return;
       case 'RESULT': case '$RESULT': this.state.result = value; return;
     }
 

@@ -31,9 +31,7 @@ export async function substituteExpressions(text: string, evaluator: Evaluator):
         try {
           // Parse and evaluate the expression
           const val = await evaluator.evalExprString(exprStr);
-          // String-typed values (isString flag, or $-prefixed expr) always use .str,
-          // even when empty. Numeric-only values fall back to the number.
-          result += val.isString ? val.str : (val.str || String(val.num));
+          result += val.str || String(val.num);
         } catch {
           // On error, output the original text
           result += '<<' + exprStr + '>>';

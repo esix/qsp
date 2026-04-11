@@ -4,13 +4,15 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const PROD = 'https://if-quests.ru';
-const gameRoutes = ['/games.json', '/pirates', '/steelrat', '/jupiter2'];
+// Proxy is no longer needed — all games are in public/
+// const PROD = 'https://if-quests.ru';
+const gameRoutes: string[] = [];
 
 export default defineConfig({
   resolve: {
     alias: {
       'qsp-core': resolve(__dirname, '../qsp-core/src'),
+      'qsp-player': resolve(__dirname, '../qsp-player/src'),
     },
   },
   build: {
