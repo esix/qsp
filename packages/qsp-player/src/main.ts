@@ -282,19 +282,35 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Volume slider ───────────────────────────────────────────────
 
+const volumePopup = $('volume-popup');
+const volumeSliderV = $('volume-slider-v') as HTMLInputElement;
+const volumeIconEl = $('volume-icon');
+
 const savedVolume = localStorage.getItem('qsp_user_volume');
 if (savedVolume !== null) {
   volumeSlider.value = savedVolume;
+  volumeSliderV.value = savedVolume;
   midiPlayer.setUserVolume(Number(savedVolume));
   simpleAudio.setUserVolume(Number(savedVolume));
 }
 
-volumeSlider.addEventListener('input', () => {
-  const v = Number(volumeSlider.value);
+function setVolume(v: number) {
+  volumeSlider.value = String(v);
+  volumeSliderV.value = String(v);
   midiPlayer.setUserVolume(v);
   simpleAudio.setUserVolume(v);
   localStorage.setItem('qsp_user_volume', String(v));
+}
+
+volumeSlider.addEventListener('input', () => setVolume(Number(volumeSlider.value)));
+volumeSliderV.addEventListener('input', () => setVolume(Number(volumeSliderV.value)));
+
+// Mobile: toggle vertical volume popup
+volumeIconEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  volumePopup.classList.toggle('hidden');
 });
+document.addEventListener('click', () => volumePopup.classList.add('hidden'));
 
 // ─── Input ───────────────────────────────────────────────────────
 

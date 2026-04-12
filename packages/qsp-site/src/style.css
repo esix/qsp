@@ -262,6 +262,12 @@ a { color: var(--accent); }
   user-select: none;
 }
 
+/* Hide mobile volume popup/slider on desktop */
+@media (min-width: 769px) {
+  #volume-popup { display: none !important; }
+  #volume-slider-v { display: none; }
+}
+
 #volume-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -552,18 +558,49 @@ a { color: var(--accent); }
   #games-section { padding: 0 16px 16px; }
   #games-grid { grid-template-columns: 1fr; gap: 12px; }
 
-  /* Player header: compact, no overflow */
+  /* Player header: compact, single line */
   #player-header {
-    padding: 6px 8px;
-    gap: 6px;
-    font-size: 13px;
-    overflow: hidden;
-    flex-wrap: wrap;
+    padding: 4px 8px;
+    gap: 4px;
   }
-  #back-btn { padding: 4px 8px; font-size: 13px; }
+  #back-btn { padding: 3px 6px; font-size: 12px; }
   #player-title { font-size: 13px; min-width: 0; }
-  #volume-control { display: none; }
-  #player-restart-btn { font-size: 16px; padding: 4px 8px; }
+  /* Volume: button + vertical popup on mobile */
+  #volume-control { position: relative; }
+  #volume-slider { display: none; }
+  #volume-icon {
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+  }
+  #volume-popup {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    z-index: 200;
+    display: block;
+  }
+  #volume-popup.hidden { display: none; }
+  #volume-slider-v {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    -webkit-appearance: slider-vertical;
+    appearance: slider-vertical;
+    display: block;
+    width: 28px;
+    height: 120px;
+    accent-color: var(--accent);
+  }
+  #player-restart-btn { font-size: 16px; padding: 3px 6px; }
 
   /* Player wrapper: single scrollable column */
   #player-wrap { height: auto; min-height: 100vh; }
