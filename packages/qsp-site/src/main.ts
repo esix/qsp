@@ -348,6 +348,7 @@ restartBtn.addEventListener('click', async () => {
 // ─── Catalog → Player ────────────────────────────────────────────
 
 async function playGame(meta: GameMeta) {
+  location.hash = meta.id;
   playerTitle.textContent = meta.title;
   catalogEl.classList.add('hidden');
   playerWrap.classList.remove('hidden');
@@ -382,6 +383,7 @@ backBtn.addEventListener('click', () => {
   viewImg.src = '';
   playerWrap.classList.add('hidden');
   catalogEl.classList.remove('hidden');
+  history.replaceState(null, '', location.pathname);
 });
 
 function revokeLocalAssets() {
@@ -398,6 +400,13 @@ async function loadCatalog() {
     const resp = await fetch('/games.json');
     const games: GameMeta[] = await resp.json();
     renderCatalog(games);
+
+    // Auto-open game from URL hash (e.g. #steelrat)
+    const hash = location.hash.slice(1);
+    if (hash) {
+      const game = games.find(g => g.id === hash);
+      if (game) playGame(game);
+    }
   } catch {
     gamesGrid.innerHTML = '<p class="error">Не удалось загрузить каталог игр.</p>';
   }
@@ -419,6 +428,9 @@ function renderCatalog(games: GameMeta[]) {
     gamesGrid.appendChild(card);
   }
 }
+
+// Hide catalog immediately if a game hash is present (avoids flash)
+if (location.hash.length > 1) catalogEl.classList.add('hidden');
 
 loadCatalog();
 

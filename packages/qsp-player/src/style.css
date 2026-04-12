@@ -504,3 +504,106 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
 }
+
+/* ─── Mobile responsive ──────────────── */
+
+@media (max-width: 768px) {
+  /* Compact header */
+  header {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  #site-logo, header > span:first-child {
+    font-size: 16px;
+  }
+
+  /* Stacked single-column game layout */
+  #game {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto auto auto;
+  }
+
+  /* Main text: full width */
+  #main-panel {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 12px;
+  }
+
+  #main-text {
+    max-width: none;
+    font-size: 15px;
+  }
+
+  /* Side panel: below main text, horizontal-ish */
+  #side-panel {
+    grid-column: 1;
+    grid-row: 2;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  /* Stat panel */
+  #stat-panel {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 8px 12px;
+    max-height: 120px;
+  }
+
+  /* Input panel */
+  #input-panel {
+    grid-column: 1;
+    grid-row: 4;
+    padding: 6px 10px;
+  }
+
+  /* Smaller action/object items */
+  #actions-list li, #objects-list li {
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+
+  /* View images: constrain height */
+  #view-img {
+    max-height: 30vh;
+  }
+
+  /* Message/menu dialogs: fit mobile */
+  #msg-box {
+    min-width: auto;
+    max-width: 90vw;
+    margin: 0 16px;
+  }
+
+  #menu-box {
+    min-width: auto;
+    max-width: 90vw;
+    margin: 0 16px;
+  }
+
+  /* Drop zone: smaller padding */
+  #drop-zone {
+    margin: 12px;
+  }
+
+  #drop-icon {
+    font-size: 48px;
+  }
+
+  #drop-zone-content p {
+    font-size: 15px;
+  }
+
+  /* Drop overlay */
+  #drop-overlay-content {
+    padding: 24px 32px;
+  }
+
+  #drop-overlay-icon {
+    font-size: 48px;
+  }
+}

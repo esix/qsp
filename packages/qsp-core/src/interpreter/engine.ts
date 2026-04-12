@@ -97,15 +97,6 @@ export class QspEngine {
     );
     if (locIndex < 0) return;
 
-    // Autosave: snapshot the state of the current (previous) location before entering the new one.
-    // Only save if the previous location was a real player-choice location:
-    //   - not an internal service location (QSP convention: names starting with '_')
-    //   - had at least one action (scripted cutscenes with no choices are not save points)
-    const prevLocName = this.state.curLoc >= 0 ? this.locations[this.state.curLoc]?.name : null;
-    if (prevLocName && !prevLocName.startsWith('_') && this.state.actions.length > 0) {
-      this.callbacks.onSaveGame?.('autosave.sav', this.executor.buildSaveData());
-    }
-
     this.state.curLoc = locIndex;
     const loc = this.locations[locIndex];
 
@@ -163,6 +154,12 @@ export class QspEngine {
         if (!(e instanceof ExitSignal)) throw e;
       }
       await this.notifyUI();
+    }
+
+    // Autosave after the location is fully loaded (code executed, UI updated).
+    // Skip internal/service locations (names starting with _).
+    if (!name.startsWith('_')) {
+      this.callbacks.onSaveGame?.('autosave.sav', this.executor.buildSaveData());
     }
 
   }
