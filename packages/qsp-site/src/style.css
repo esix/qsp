@@ -552,38 +552,53 @@ a { color: var(--accent); }
   #games-section { padding: 0 16px 16px; }
   #games-grid { grid-template-columns: 1fr; gap: 12px; }
 
-  /* Player header: compact */
-  #player-header { padding: 6px 10px; gap: 6px; font-size: 14px; }
-  #player-title { font-size: 14px; }
-  #volume-control { gap: 4px; }
-  #volume-slider { width: 60px; }
+  /* Player header: compact, no overflow */
+  #player-header {
+    padding: 6px 8px;
+    gap: 6px;
+    font-size: 13px;
+    overflow: hidden;
+    flex-wrap: wrap;
+  }
+  #back-btn { padding: 4px 8px; font-size: 13px; }
+  #player-title { font-size: 13px; min-width: 0; }
+  #volume-control { display: none; }
+  #player-restart-btn { font-size: 16px; padding: 4px 8px; }
 
-  /* Stacked single-column game layout */
+  /* Player wrapper: single scrollable column */
+  #player-wrap { height: auto; min-height: 100vh; }
+
+  /* Game: single-column, no nested scroll */
   #game {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto auto auto;
+    grid-template-rows: auto auto auto auto;
     grid-template-areas:
       "main"
       "side"
       "stat"
       "input";
+    overflow: visible;
   }
 
-  /* Main text: full width */
-  #main-panel { padding: 12px; }
+  /* Main text: full width, no scroll (page scrolls instead) */
+  #main-panel {
+    padding: 12px;
+    overflow-y: visible;
+    min-height: 30vh;
+  }
   #main-text { font-size: 15px; }
 
-  /* Side panel: below main text */
+  /* Side panel: below main text, no nested scroll */
   #side-panel {
     border-left: none;
     border-top: 1px solid var(--border);
-    max-height: 40vh;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   /* Stat/input panels */
-  #stat-panel { padding: 8px 12px; max-height: 120px; }
-  #input-panel { padding: 6px 10px; }
+  #stat-panel { padding: 8px 12px; max-height: none; overflow-y: visible; }
+  #input-panel { padding: 6px 10px; position: sticky; bottom: 0; z-index: 10; }
 
   /* View images: constrain */
   #view-img { max-height: 30vh; }

@@ -508,27 +508,37 @@ body {
 /* ─── Mobile responsive ──────────────── */
 
 @media (max-width: 768px) {
-  /* Compact header */
+  /* Compact header — no overflow */
   header {
-    padding: 6px 10px;
-    gap: 6px;
+    padding: 6px 8px;
+    gap: 4px;
+    flex-wrap: wrap;
+    overflow: hidden;
   }
 
-  #site-logo, header > span:first-child {
-    font-size: 16px;
+  header > span:first-child {
+    font-size: 14px;
   }
 
-  /* Stacked single-column game layout */
+  /* Hide volume on mobile */
+  #volume-control { display: none; }
+
+  /* Single scrollable column — no nested scrollbars */
+  body { height: auto; min-height: 100vh; }
+
   #game {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto auto auto;
+    grid-template-rows: auto auto auto auto;
+    overflow: visible;
   }
 
-  /* Main text: full width */
+  /* Main text: full width, no scroll */
   #main-panel {
     grid-column: 1;
     grid-row: 1;
     padding: 12px;
+    overflow-y: visible;
+    min-height: 30vh;
   }
 
   #main-text {
@@ -536,14 +546,14 @@ body {
     font-size: 15px;
   }
 
-  /* Side panel: below main text, horizontal-ish */
+  /* Side panel: below main text, no nested scroll */
   #side-panel {
     grid-column: 1;
     grid-row: 2;
     border-left: none;
     border-top: 1px solid var(--border);
-    max-height: 40vh;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   /* Stat panel */
@@ -551,14 +561,18 @@ body {
     grid-column: 1;
     grid-row: 3;
     padding: 8px 12px;
-    max-height: 120px;
+    max-height: none;
+    overflow-y: visible;
   }
 
-  /* Input panel */
+  /* Input panel — sticky at bottom */
   #input-panel {
     grid-column: 1;
     grid-row: 4;
     padding: 6px 10px;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
   }
 
   /* Smaller action/object items */
