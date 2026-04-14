@@ -542,15 +542,19 @@ body {
   #volume-icon {
     font-size: 16px;
     cursor: pointer;
-    padding: 4px 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--border);
     border-radius: 4px;
   }
   #volume-popup {
+    display: block;
     position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    top: calc(100% + 8px);
+    right: 0;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;

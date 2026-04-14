@@ -315,11 +315,14 @@ volumeSlider.addEventListener('input', () => setVolume(Number(volumeSlider.value
 volumeSliderV.addEventListener('input', () => setVolume(Number(volumeSliderV.value)));
 
 // Mobile: toggle vertical volume popup
-volumeIconEl.addEventListener('click', (e) => {
-  e.stopPropagation();
+volumeIconEl.addEventListener('click', () => {
   volumePopup.classList.toggle('hidden');
 });
-document.addEventListener('click', () => volumePopup.classList.add('hidden'));
+document.addEventListener('click', (e) => {
+  if (!(e.target as HTMLElement).closest('#volume-control')) {
+    volumePopup.classList.add('hidden');
+  }
+});
 
 // ─── Input ───────────────────────────────────────────────────────
 
