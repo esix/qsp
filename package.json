@@ -8,6 +8,8 @@
     "serve:site": "npm run preview --workspace=packages/qsp-site",
     "test": "npm test --workspace=packages/qsp-core",
     "dev": "npm run dev --workspace=packages/qsp-player",
-    "dev:site": "npm run dev --workspace=packages/qsp-site"
+    "dev:site": "npm run dev --workspace=packages/qsp-site",
+    "dev:editor": "npm run dev --workspace=packages/qsp-editor",
+    "build:editor": "npm run build --workspace=packages/qsp-editor"
   }
 }

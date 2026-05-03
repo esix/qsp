@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QSP Editor</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/src/main.ts" defer></script>
+</head>
+<body>
+
+  <header id="topbar">
+    <div id="brand">QSP Editor</div>
+
+    <button id="new-project-btn">Новый</button>
+
+    <label class="file-btn">
+      <span>Открыть .qsp / .qsps</span>
+      <input type="file" id="open-input" accept=".qsp,.qsps">
+    </label>
+
+    <button id="save-qsps-btn">Сохранить .qsps</button>
+    <button id="save-qsp-btn">Скомпилировать .qsp</button>
+
+    <span class="spacer"></span>
+
+    <span id="project-status"></span>
+
+    <button id="run-btn" class="primary">▶ Запустить</button>
+  </header>
+
+  <main id="workspace">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <span>Локации</span>
+        <button id="add-loc-btn" title="Добавить локацию">+</button>
+      </div>
+      <ul id="loc-list"></ul>
+    </aside>
+
+    <section id="editor-pane">
+      <div id="editor-header">
+        <input type="text" id="loc-name-input" placeholder="(нет выбранной локации)" disabled>
+        <button id="rename-btn" disabled>Переименовать</button>
+        <button id="delete-btn" disabled>Удалить</button>
+      </div>
+      <textarea id="code-editor" spellcheck="false" placeholder="Выберите локацию слева или создайте новую"></textarea>
+    </section>
+
+    <section id="preview-pane">
+      <div id="preview-header">
+        <span>Предпросмотр</span>
+        <button id="play-from-here-btn" title="Запустить с текущей локации">▶ С этой</button>
+        <button id="reload-preview-btn" title="Перезапустить с начала">⟳</button>
+      </div>
+      <div id="preview-area" class="empty">Нажмите ▶ Запустить, чтобы протестировать игру</div>
+    </section>
+  </main>
+
+  <footer id="problems">
+    <div id="problems-header">
+      <span>Проблемы: <span id="problems-count">0</span></span>
+    </div>
+    <ul id="problems-list"></ul>
+  </footer>
+
+</body>
+</html>

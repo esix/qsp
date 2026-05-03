@@ -1,7 +1,7 @@
 import { QspEngine } from 'qsp-core/interpreter/engine.js';
-import type { QspRuntimeAction, QspObject } from 'qsp-core/interpreter/state.js';
 import { MidiAudioPlayer, SimpleAudioPlayer } from './audio.js';
 import { collectDroppedFiles, collectFromFile, prepareLocalGame, revokeAssets } from './local-files.js';
+import { QspRenderer } from './renderer.js';
 
 // ─── DOM ─────────────────────────────────────────────────────────
 
@@ -32,414 +32,228 @@ const viewImg       = $('view-img') as HTMLImageElement;
 const menuOverlay   = $('menu-overlay');
 const menuList      = $('menu-list');
 const menuCancel    = $('menu-cancel');
+const mainPanel     = $('main-panel');
+const volumePopup   = $('volume-popup');
+const volumeSliderV = $('volume-slider-v') as HTMLInputElement;
+const volumeIconEl  = $('volume-icon');
 
-// ─── Engine ──────────────────────────────────────────────────────
+// ─── Engine + audio + state ─────────────────────────────────────
 
 const engine = new QspEngine();
-let currentGameData: Uint8Array | null = null;
-let currentGameId = '';
-/** When a server-hosted game is loaded, this is the base URL path (e.g. 'jupiter2/') */
-let currentGameBase = '';
-/** When a local game is loaded (drag-drop), maps lowercase relative path → blob URL */
-let localAssets: Map<string, string> | null = null;
-let menuCancelResolve: (() => void) | null = null;
-
 const midiPlayer = new MidiAudioPlayer();
 const simpleAudio = new SimpleAudioPlayer();
 
+let currentGameData: Uint8Array | null = null;
+let currentGameId = '';
+/** When a server-hosted game is loaded, this is the base URL path (e.g. 'jupiter2/'). */
+let currentGameBase = '';
+/** When a local game is loaded (drag-drop), maps lowercase relative path → blob URL. */
+let localAssets: Map<string, string> | null = null;
+
+/** Resolve a game-relative asset path to a usable URL (passed to renderer). */
+function resolveAssetUrl(path: string): string {
+	const normalized = path.replace(/\\/g, '/');
+	if (localAssets) {
+		const url = localAssets.get(normalized.toLowerCase());
+		if (url) return url;
+	}
+	return '/' + currentGameBase + normalized;
+}
+
+// Track audio playback completion. Host-specific because we have access to localAssets
+// for reverse-mapping blob URLs back to original paths.
 simpleAudio.onFileEnded = (url: string) => {
-  if (localAssets) {
-    for (const [path, blobUrl] of localAssets) {
-      if (blobUrl === url) {
-        engine.state.playingFiles.delete(path.toUpperCase());
-        return;
-      }
-    }
-  }
-  const base = '/' + currentGameBase;
-  const relative = url.startsWith(base) ? url.slice(base.length) : url.replace(/^\//, '');
-  engine.state.playingFiles.delete(relative.toUpperCase());
+	if (localAssets) {
+		for (const [path, blobUrl] of localAssets) {
+			if (blobUrl === url) {
+				engine.state.playingFiles.delete(path.toUpperCase());
+				return;
+			}
+		}
+	}
+	const base = '/' + currentGameBase;
+	const relative = url.startsWith(base) ? url.slice(base.length) : url.replace(/^\//, '');
+	engine.state.playingFiles.delete(relative.toUpperCase());
 };
 
-function isMidi(file: string): boolean {
-  return /\.(mid|midi)$/i.test(file);
-}
+// ─── Renderer ────────────────────────────────────────────────────
 
-// ─── Helpers ─────────────────────────────────────────────────────
-
-/** Resolve a game-relative asset path to a usable URL */
-function resolveAssetUrl(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
-  if (localAssets) {
-    const url = localAssets.get(normalized.toLowerCase());
-    if (url) return url;
-  }
-  return '/' + currentGameBase + normalized;
-}
-
-function qspColorToCss(color: number): string {
-  const r = (color & 0xFF).toString(16).padStart(2, '0');
-  const g = ((color >> 8) & 0xFF).toString(16).padStart(2, '0');
-  const b = ((color >> 16) & 0xFF).toString(16).padStart(2, '0');
-  return `#${r}${g}${b}`;
-}
-
-function applyColors(bcolor: number, fcolor: number, lcolor: number) {
-  gameEl.style.setProperty('--game-bg',   bcolor >= 0 ? qspColorToCss(bcolor) : '');
-  gameEl.style.setProperty('--game-fg',   fcolor >= 0 ? qspColorToCss(fcolor) : '');
-  gameEl.style.setProperty('--game-link', lcolor >= 0 ? qspColorToCss(lcolor) : '');
-}
-
-function applyBackImage(path: string) {
-  const mainPanel = $('main-panel');
-  if (path) {
-    mainPanel.style.setProperty('--game-backimage', `url('${resolveAssetUrl(path)}')`);
-  } else {
-    mainPanel.style.removeProperty('--game-backimage');
-  }
-}
-
-function protectExecHrefs(html: string): string {
-  return html.replace(/href="exec:([^"]*)"/gi, (_, cmd) =>
-    `href="exec:${cmd.replace(/&/g, '&amp;')}"`
-  );
-}
-
-/** Rewrite src="..." attributes in HTML to use resolved asset URLs.
- *  Handles quoted (src="path") and unquoted (src=path) attributes. */
-function resolveHtmlAssets(html: string): string {
-  return html.replace(/\b(src=)(["']?)([^"' >]+)\2/gi, (match, pre, quote, path) => {
-    if (/^(https?:|data:|blob:)/i.test(path)) return match;
-    const resolved = resolveAssetUrl(path);
-    return pre + (quote || '"') + resolved + (quote || '"');
-  });
-}
-
-// ─── Engine callbacks ────────────────────────────────────────────
-
-engine.on({
-  onMainTextChanged(text) {
-    if (engine.state.useHtml) {
-      mainText.innerHTML = resolveHtmlAssets(protectExecHrefs(text));
-    } else {
-      mainText.textContent = text;
-    }
-    mainText.parentElement!.scrollTop = mainText.parentElement!.scrollHeight;
-  },
-  onStatTextChanged(text) {
-    if (engine.state.useHtml) {
-      statText.innerHTML = resolveHtmlAssets(protectExecHrefs(text));
-    } else {
-      statText.textContent = text;
-    }
-    statPanel.classList.toggle('hidden', !text && !engine.state.showStat);
-  },
-  onActionsChanged(actions: QspRuntimeAction[]) {
-    actionsList.innerHTML = '';
-    for (let i = 0; i < actions.length; i++) {
-      const li = document.createElement('li');
-      if (engine.state.useHtml) li.innerHTML = resolveHtmlAssets(actions[i].name);
-      else li.textContent = actions[i].name;
-      li.addEventListener('click', () => engine.execAction(i));
-      actionsList.appendChild(li);
-    }
-    actionsPanel.classList.toggle('hidden', !engine.state.showActs);
-  },
-  onObjectsChanged(objects: QspObject[]) {
-    objectsList.innerHTML = '';
-    for (let i = 0; i < objects.length; i++) {
-      const li = document.createElement('li');
-      if (engine.state.useHtml) li.innerHTML = resolveHtmlAssets(objects[i].name);
-      else li.textContent = objects[i].name;
-      li.addEventListener('click', () => engine.selectObject(i));
-      objectsList.appendChild(li);
-    }
-    objectsPanel.classList.toggle('hidden', !engine.state.showObjs || objects.length === 0);
-  },
-  onMessage(text) {
-    msgText.textContent = text;
-    msgOverlay.classList.remove('hidden');
-  },
-  onInput(prompt) {
-    return window.prompt(prompt) ?? '';
-  },
-  onColorsChanged(bcolor, fcolor, lcolor) {
-    applyColors(bcolor, fcolor, lcolor);
-  },
-  onBackImage(path: string) {
-    applyBackImage(path);
-  },
-  onView(path: string) {
-    if (!path) {
-      viewPanel.classList.add('hidden');
-      viewImg.src = '';
-    } else {
-      viewImg.src = resolveAssetUrl(path);
-      viewPanel.classList.remove('hidden');
-    }
-  },
-  onMenu(items: string[]): Promise<number> {
-    return new Promise(resolve => {
-      menuList.innerHTML = '';
-      for (let i = 0; i < items.length; i++) {
-        const li = document.createElement('li');
-        li.textContent = items[i];
-        li.addEventListener('click', () => {
-          menuOverlay.classList.add('hidden');
-          resolve(i);
-        });
-        menuList.appendChild(li);
-      }
-      menuOverlay.classList.remove('hidden');
-      menuCancelResolve = () => { menuOverlay.classList.add('hidden'); resolve(-1); };
-    });
-  },
-  onPlayFile(file: string, volume: number) {
-    const url = resolveAssetUrl(file);
-    if (isMidi(file)) {
-      midiPlayer.play(url, volume);
-    } else {
-      simpleAudio.play(url, volume);
-    }
-  },
-  onSetVolume(volume: number) {
-    volumeSlider.value = String(volume);
-    midiPlayer.setGameVolume(volume);
-    simpleAudio.setGameVolume(volume);
-  },
-  onCloseFile(file: string | null) {
-    if (file === null) {
-      midiPlayer.stop(null);
-      simpleAudio.stop(null);
-    } else {
-      const url = resolveAssetUrl(file);
-      if (isMidi(file)) midiPlayer.stop(url);
-      else simpleAudio.stop(url);
-    }
-  },
-  onSaveGame(filename: string, data: string) {
-    try { localStorage.setItem('qsp_' + currentGameId + '_' + filename, data); } catch {}
-  },
-  onLoadGame(filename: string): string | null {
-    try { return localStorage.getItem('qsp_' + currentGameId + '_' + filename); } catch { return null; }
-  },
-  async onLoadQst(filename: string): Promise<Uint8Array | null> {
-    try {
-      const url = resolveAssetUrl(filename);
-      const resp = await fetch(url);
-      const ct = resp.headers.get('content-type') ?? '';
-      if (!resp.ok || ct.includes('text/html')) {
-        alert(`Cannot load library "${filename}".\nLoad a folder or ZIP containing all game files.`);
-        return null;
-      }
-      return new Uint8Array(await resp.arrayBuffer());
-    } catch {
-      alert(`Cannot load library "${filename}".\nLoad a folder or ZIP containing all game files.`);
-      return null;
-    }
-  },
+const renderer = new QspRenderer({
+	engine,
+	mainText, actionsList, statText, objectsList,
+	gameEl, mainPanel,
+	viewPanel, viewImg,
+	statPanel, actionsPanel, objectsPanel,
+	msgOverlay, msgText, msgOk,
+	menuOverlay, menuList, menuCancel,
+	inputLine, inputSubmit, inputPanel,
+	resolveAssetUrl,
+	midiPlayer, simpleAudio,
+	volumeSliders: [volumeSlider, volumeSliderV],
+	saveGame: (filename, data) => {
+		try { localStorage.setItem('qsp_' + currentGameId + '_' + filename, data); } catch {}
+	},
+	loadGame: (filename) => {
+		try { return localStorage.getItem('qsp_' + currentGameId + '_' + filename); } catch { return null; }
+	},
+	loadQst: async (filename) => {
+		try {
+			const url = resolveAssetUrl(filename);
+			const resp = await fetch(url);
+			const ct = resp.headers.get('content-type') ?? '';
+			if (!resp.ok || ct.includes('text/html')) {
+				alert(`Cannot load library "${filename}".\nLoad a folder or ZIP containing all game files.`);
+				return null;
+			}
+			return new Uint8Array(await resp.arrayBuffer());
+		} catch {
+			alert(`Cannot load library "${filename}".\nLoad a folder or ZIP containing all game files.`);
+			return null;
+		}
+	},
 });
 
-// ─── Link interception ───────────────────────────────────────────
-
-function handleQspLink(e: MouseEvent) {
-  const anchor = (e.target as HTMLElement).closest('a');
-  if (!anchor) return;
-  const href = anchor.getAttribute('href') ?? '';
-  if (href.toLowerCase().startsWith('exec:')) {
-    e.preventDefault();
-    engine.execDynamic(href.slice('exec:'.length).trim(), []);
-    return;
-  }
-  const idx = parseInt(href, 10);
-  if (!isNaN(idx) && String(idx) === href.trim()) {
-    e.preventDefault();
-    engine.execAction(idx - 1);
-  }
-}
-
-viewImg.addEventListener('click', () => viewImg.classList.toggle('expanded'));
-mainText.addEventListener('click', handleQspLink);
-statText.addEventListener('click', handleQspLink);
-
-// ─── Message dialog ──────────────────────────────────────────────
-
-msgOk.addEventListener('click', () => msgOverlay.classList.add('hidden'));
-document.addEventListener('keydown', (e) => {
-  if (!msgOverlay.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'Escape')) {
-    msgOverlay.classList.add('hidden');
-  }
-});
-
-// ─── Menu dialog ─────────────────────────────────────────────────
-
-menuCancel.addEventListener('click', () => { menuCancelResolve?.(); menuCancelResolve = null; });
-document.addEventListener('keydown', (e) => {
-  if (!menuOverlay.classList.contains('hidden') && e.key === 'Escape') {
-    menuCancelResolve?.(); menuCancelResolve = null;
-  }
-});
-
-// ─── Volume slider ───────────────────────────────────────────────
-
-const volumePopup = $('volume-popup');
-const volumeSliderV = $('volume-slider-v') as HTMLInputElement;
-const volumeIconEl = $('volume-icon');
+// ─── User volume slider ──────────────────────────────────────────
 
 const savedVolume = localStorage.getItem('qsp_user_volume');
 if (savedVolume !== null) {
-  volumeSlider.value = savedVolume;
-  volumeSliderV.value = savedVolume;
-  midiPlayer.setUserVolume(Number(savedVolume));
-  simpleAudio.setUserVolume(Number(savedVolume));
+	volumeSlider.value = savedVolume;
+	volumeSliderV.value = savedVolume;
+	midiPlayer.setUserVolume(Number(savedVolume));
+	simpleAudio.setUserVolume(Number(savedVolume));
 }
 
 function setVolume(v: number) {
-  volumeSlider.value = String(v);
-  volumeSliderV.value = String(v);
-  midiPlayer.setUserVolume(v);
-  simpleAudio.setUserVolume(v);
-  localStorage.setItem('qsp_user_volume', String(v));
+	volumeSlider.value = String(v);
+	volumeSliderV.value = String(v);
+	midiPlayer.setUserVolume(v);
+	simpleAudio.setUserVolume(v);
+	localStorage.setItem('qsp_user_volume', String(v));
 }
 
 volumeSlider.addEventListener('input', () => setVolume(Number(volumeSlider.value)));
 volumeSliderV.addEventListener('input', () => setVolume(Number(volumeSliderV.value)));
 
 // Mobile: toggle vertical volume popup
-volumeIconEl.addEventListener('click', () => {
-  volumePopup.classList.toggle('hidden');
-});
+volumeIconEl.addEventListener('click', () => volumePopup.classList.toggle('hidden'));
 document.addEventListener('click', (e) => {
-  if (!(e.target as HTMLElement).closest('#volume-control')) {
-    volumePopup.classList.add('hidden');
-  }
+	if (!(e.target as HTMLElement).closest('#volume-control')) {
+		volumePopup.classList.add('hidden');
+	}
 });
-
-// ─── Input ───────────────────────────────────────────────────────
-
-function submitInput() {
-  engine.submitInput(inputLine.value);
-  inputLine.value = '';
-}
-inputSubmit.addEventListener('click', submitInput);
-inputLine.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitInput(); });
 
 // ─── Game start ──────────────────────────────────────────────────
 
 async function startGame(data: Uint8Array) {
-  engine.stopTimer();
-  applyColors(-1, -1, -1);
-  applyBackImage('');
-  engine.loadGame(data);
-  await engine.start();
+	engine.stopTimer();
+	renderer.resetTheme();
+	engine.loadGame(data);
+	await engine.start();
 
-  dropZone.classList.add('hidden');
-  gameEl.classList.remove('hidden');
-  restartBtn.classList.remove('hidden');
-  volumeControl.classList.remove('hidden');
-  inputPanel.classList.toggle('hidden', !engine.state.showInput);
-  statPanel.classList.toggle('hidden', !engine.state.showStat);
-  actionsPanel.classList.toggle('hidden', !engine.state.showActs);
-  objectsPanel.classList.toggle('hidden', !engine.state.showObjs || engine.state.objects.length === 0);
+	dropZone.classList.add('hidden');
+	gameEl.classList.remove('hidden');
+	restartBtn.classList.remove('hidden');
+	volumeControl.classList.remove('hidden');
+	inputPanel.classList.toggle('hidden', !engine.state.showInput);
+	statPanel.classList.toggle('hidden', !engine.state.showStat);
+	actionsPanel.classList.toggle('hidden', !engine.state.showActs);
+	objectsPanel.classList.toggle('hidden', !engine.state.showObjs || engine.state.objects.length === 0);
 }
 
 restartBtn.addEventListener('click', async () => {
-  if (currentGameData) {
-    viewPanel.classList.add('hidden');
-    viewImg.classList.remove('expanded');
-    viewImg.src = '';
-    engine.stopTimer();
-    applyColors(-1, -1, -1);
-    applyBackImage('');
-    engine.loadGame(currentGameData);
-    await engine.startFresh();
-    inputPanel.classList.toggle('hidden', !engine.state.showInput);
-    statPanel.classList.toggle('hidden', !engine.state.showStat);
-    actionsPanel.classList.toggle('hidden', !engine.state.showActs);
-    objectsPanel.classList.toggle('hidden', !engine.state.showObjs || engine.state.objects.length === 0);
-  }
+	if (currentGameData) {
+		viewPanel.classList.add('hidden');
+		viewImg.classList.remove('expanded');
+		viewImg.src = '';
+		engine.stopTimer();
+		renderer.resetTheme();
+		engine.loadGame(currentGameData);
+		await engine.startFresh();
+		inputPanel.classList.toggle('hidden', !engine.state.showInput);
+		statPanel.classList.toggle('hidden', !engine.state.showStat);
+		actionsPanel.classList.toggle('hidden', !engine.state.showActs);
+		objectsPanel.classList.toggle('hidden', !engine.state.showObjs || engine.state.objects.length === 0);
+	}
 });
 
 // ─── Drag-and-drop & file input ─────────────────────────────────
 
 document.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  if (gameEl.classList.contains('hidden')) {
-    dropZone.classList.add('drag-hover');
-  } else {
-    dropOverlay.classList.remove('hidden');
-  }
+	e.preventDefault();
+	if (gameEl.classList.contains('hidden')) {
+		dropZone.classList.add('drag-hover');
+	} else {
+		dropOverlay.classList.remove('hidden');
+	}
 });
 document.addEventListener('dragleave', (e) => {
-  if (!(e as DragEvent).relatedTarget) {
-    dropZone.classList.remove('drag-hover');
-    dropOverlay.classList.add('hidden');
-  }
+	if (!(e as DragEvent).relatedTarget) {
+		dropZone.classList.remove('drag-hover');
+		dropOverlay.classList.add('hidden');
+	}
 });
 document.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-hover');
-  dropOverlay.classList.add('hidden');
-  try {
-    const files = await collectDroppedFiles(e as DragEvent);
-    await loadLocalGame(files);
-  } catch (err) {
-    alert('Error: ' + (err as Error).message);
-  }
+	e.preventDefault();
+	dropZone.classList.remove('drag-hover');
+	dropOverlay.classList.add('hidden');
+	try {
+		const files = await collectDroppedFiles(e as DragEvent);
+		await loadLocalGame(files);
+	} catch (err) {
+		alert('Error: ' + (err as Error).message);
+	}
 });
 
 fileInput.addEventListener('change', async () => {
-  const file = fileInput.files?.[0];
-  if (!file) return;
-  try {
-    const files = await collectFromFile(file);
-    await loadLocalGame(files);
-  } catch (err) {
-    alert('Error: ' + (err as Error).message);
-  }
-  fileInput.value = '';
+	const file = fileInput.files?.[0];
+	if (!file) return;
+	try {
+		const files = await collectFromFile(file);
+		await loadLocalGame(files);
+	} catch (err) {
+		alert('Error: ' + (err as Error).message);
+	}
+	fileInput.value = '';
 });
 
 // Folder input — loads all files from a selected directory
 const folderInput = $('folder-input') as HTMLInputElement;
 folderInput.addEventListener('change', async () => {
-  const fileList = folderInput.files;
-  if (!fileList || fileList.length === 0) return;
-  try {
-    const files = new Map<string, Blob>();
-    for (let i = 0; i < fileList.length; i++) {
-      // webkitRelativePath gives "dirname/subdir/file.ext"
-      const rel = fileList[i].webkitRelativePath;
-      // Strip the top-level directory name to get game-relative path
-      const path = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
-      files.set(path.toLowerCase(), fileList[i]);
-    }
-    await loadLocalGame(files);
-  } catch (err) {
-    alert('Error: ' + (err as Error).message);
-  }
-  folderInput.value = '';
+	const fileList = folderInput.files;
+	if (!fileList || fileList.length === 0) return;
+	try {
+		const files = new Map<string, Blob>();
+		for (let i = 0; i < fileList.length; i++) {
+			const rel = fileList[i].webkitRelativePath;
+			const path = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
+			files.set(path.toLowerCase(), fileList[i]);
+		}
+		await loadLocalGame(files);
+	} catch (err) {
+		alert('Error: ' + (err as Error).message);
+	}
+	folderInput.value = '';
 });
 
 function cleanupLocalAssets() {
-  if (localAssets) {
-    revokeAssets(localAssets);
-    localAssets = null;
-  }
+	if (localAssets) {
+		revokeAssets(localAssets);
+		localAssets = null;
+	}
 }
 
 async function loadLocalGame(files: Map<string, Blob>) {
-  engine.stopTimer();
-  midiPlayer.stop(null);
-  simpleAudio.stop(null);
-  cleanupLocalAssets();
+	engine.stopTimer();
+	midiPlayer.stop(null);
+	simpleAudio.stop(null);
+	cleanupLocalAssets();
 
-  const { qspData, title, assets } = await prepareLocalGame(files);
-  localAssets = assets;
-  currentGameData = qspData;
-  currentGameId = 'local_' + title.replace(/[^a-zA-Z0-9._-]/g, '_');
-  currentGameBase = '';
+	const { qspData, title, assets } = await prepareLocalGame(files);
+	localAssets = assets;
+	currentGameData = qspData;
+	currentGameId = 'local_' + title.replace(/[^a-zA-Z0-9._-]/g, '_');
+	currentGameBase = '';
 
-  document.title = title + ' — QSP Player';
-  await startGame(qspData);
+	document.title = title + ' — QSP Player';
+	await startGame(qspData);
 }
