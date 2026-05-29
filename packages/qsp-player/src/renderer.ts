@@ -58,6 +58,10 @@ export interface QspRendererConfig {
 
 	// Optional: input prompt override (default: window.prompt)
 	onInput?(prompt: string): string | Promise<string>;
+
+	/** Called after most rendering callbacks fire — useful for refreshing
+	 *  external panels (e.g. an editor's variables/debug view). */
+	onUpdate?(): void;
 }
 
 export class QspRenderer {
@@ -134,6 +138,7 @@ export class QspRenderer {
 					c.actionsList.appendChild(li);
 				}
 				if (c.actionsPanel) c.actionsPanel.classList.toggle('hidden', !engine.state.showActs);
+				c.onUpdate?.();
 			},
 
 			onObjectsChanged: (objects: QspObject[]) => {

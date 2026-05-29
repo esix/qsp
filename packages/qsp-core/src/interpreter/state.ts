@@ -180,6 +180,31 @@ export class QspVariableStore {
     this.indices.clear();
   }
 
+  /** Dump all variables for debugging — returns one entry per (name, slot) pair. */
+  dumpAll(): Array<{ name: string; index: number; key?: string; num: number; str: string; isString: boolean }> {
+    const out: Array<{ name: string; index: number; key?: string; num: number; str: string; isString: boolean }> = [];
+    for (const [name, slots] of this.vars) {
+      // Build reverse map: index → string key (if this var has one)
+      const idxMap = this.indices.get(name);
+      const idxToKey = new Map<number, string>();
+      if (idxMap) {
+        for (const [k, idx] of idxMap) idxToKey.set(idx, k);
+      }
+      const sortedIdx = Array.from(slots.keys()).sort((a, b) => a - b);
+      for (const i of sortedIdx) {
+        const v = slots.get(i)!;
+        // Skip empty default-shaped slots (no num, no str, no isString flag)
+        if (v.num === 0 && v.str === '' && !v.isString) continue;
+        out.push({
+          name, index: i, key: idxToKey.get(i),
+          num: v.num, str: v.str, isString: !!v.isString,
+        });
+      }
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name) || a.index - b.index);
+    return out;
+  }
+
   serialize(): { vars: Record<string, Array<[number, QspValue]>>; indices: Record<string, Array<[string, number]>> } {
     const vars: Record<string, Array<[number, QspValue]>> = {};
     for (const [name, map] of this.vars) {

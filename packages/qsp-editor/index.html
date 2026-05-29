@@ -10,17 +10,11 @@
 <body>
 
   <header id="topbar">
+    <button id="menu-btn" aria-label="Меню">
+      <span class="menu-icon">☰</span>
+    </button>
+
     <div id="brand">QSP Editor</div>
-
-    <button id="new-project-btn">Новый</button>
-
-    <label class="file-btn">
-      <span>Открыть .qsp / .qsps</span>
-      <input type="file" id="open-input" accept=".qsp,.qsps">
-    </label>
-
-    <button id="save-qsps-btn">Сохранить .qsps</button>
-    <button id="save-qsp-btn">Скомпилировать .qsp</button>
 
     <span class="spacer"></span>
 
@@ -28,6 +22,18 @@
 
     <button id="run-btn" class="primary">▶ Запустить</button>
   </header>
+
+  <!-- Dropdown menu (hidden by default) -->
+  <div id="menu-dropdown" class="hidden">
+    <button id="new-project-btn">Новый</button>
+    <label class="file-btn">
+      <span>Открыть .qsp / .qsps…</span>
+      <input type="file" id="open-input" accept=".qsp,.qsps">
+    </label>
+    <hr>
+    <button id="save-qsps-btn">Сохранить .qsps</button>
+    <button id="save-qsp-btn">Скомпилировать .qsp</button>
+  </div>
 
   <main id="workspace">
     <aside id="sidebar">
@@ -38,18 +44,30 @@
       <ul id="loc-list"></ul>
     </aside>
 
+    <div class="splitter splitter-v" data-resize="sidebar"></div>
+
     <section id="editor-pane">
       <div id="editor-header">
-        <input type="text" id="loc-name-input" placeholder="(нет выбранной локации)" disabled>
-        <button id="rename-btn" disabled>Переименовать</button>
-        <button id="delete-btn" disabled>Удалить</button>
+        <div id="editor-tabs">
+          <button id="tab-code"  class="tab active" data-tab="code">Код</button>
+          <button id="tab-graph" class="tab"        data-tab="graph">Граф</button>
+        </div>
+        <span id="loc-name-display">(нет выбранной локации)</span>
+        <span id="graph-controls" class="hidden">
+          <label><input type="checkbox" id="graph-hide-internal" checked> Скрыть служебные</label>
+          <button id="graph-refresh" title="Обновить">⟳</button>
+        </span>
       </div>
       <textarea id="code-editor" spellcheck="false" placeholder="Выберите локацию слева или создайте новую"></textarea>
+      <div id="graph-view" class="hidden"></div>
     </section>
+
+    <div class="splitter splitter-v" data-resize="preview"></div>
 
     <section id="preview-pane">
       <div id="preview-header">
         <span>Предпросмотр</span>
+        <button id="follow-toggle-btn" title="Следовать за выполнением — открывать код текущей локации">🔗</button>
         <button id="play-from-here-btn" title="Запустить с текущей локации">▶ С этой</button>
         <button id="reload-preview-btn" title="Перезапустить с начала">⟳</button>
       </div>
@@ -57,11 +75,23 @@
     </section>
   </main>
 
-  <footer id="problems">
-    <div id="problems-header">
-      <span>Проблемы: <span id="problems-count">0</span></span>
+  <div class="splitter splitter-h" data-resize="problems"></div>
+
+  <footer id="bottom-pane">
+    <div id="bottom-tabs">
+      <button id="tab-problems" class="bottom-tab active" data-pane="problems">
+        Проблемы <span id="problems-count" class="tab-badge">0</span>
+      </button>
+      <button id="tab-vars" class="bottom-tab" data-pane="vars">
+        Переменные <span id="vars-count" class="tab-badge">0</span>
+      </button>
+      <span class="bottom-tabs-spacer"></span>
+      <input id="vars-filter" type="text" placeholder="Фильтр…" class="hidden">
     </div>
-    <ul id="problems-list"></ul>
+    <ul id="problems-list" class="bottom-pane-content"></ul>
+    <div id="vars-pane" class="bottom-pane-content hidden">
+      <table id="vars-table"><tbody></tbody></table>
+    </div>
   </footer>
 
 </body>
